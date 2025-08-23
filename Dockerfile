@@ -4,7 +4,7 @@ FROM node:18-alpine
 # Set working directory
 WORKDIR /app
 
-# Copy package files
+# Copy package files first
 COPY package*.json ./
 COPY client/package*.json ./client/
 
@@ -15,7 +15,11 @@ RUN cd client && npm install
 # Copy source code
 COPY . .
 
-# Build React app
+# Set environment variables for build
+ENV NODE_ENV=production
+ENV CI=false
+
+# Build React app with proper error handling
 RUN cd client && npm run build
 
 # Expose port

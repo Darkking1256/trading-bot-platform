@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Trading Bot Pro</title>
+    <link rel="stylesheet" href="styles.css">
+    <!-- TradingView Charting Library -->
+    <script type="text/javascript" src="https://s3.tradingview.com/tv.js"></script>
+    <!-- Font Awesome for icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+</head>
+<body>
+    <div class="app-container">
+        <!-- Header -->
+        <header class="header">
+            <div class="header-left">
+                <h1><i class="fas fa-robot"></i> Trading Bot Pro</h1>
+                <div class="status-indicator">
+                    <span class="status-dot" id="statusDot"></span>
+                    <span class="status-text" id="statusText">Ready</span>
+                </div>
+            </div>
+            <div class="header-right">
+                <div class="current-time" id="currentTime"></div>
+                <div class="version">v1.0.0</div>
+            </div>
+        </header>
+
+        <!-- Main Content -->
+        <div class="main-content">
+            <!-- Sidebar -->
+            <aside class="sidebar">
+                <div class="sidebar-section">
+                    <h3><i class="fas fa-chart-line"></i> Symbols</h3>
+                    <div class="symbol-list">
+                        <div class="symbol-item active" data-symbol="EURUSD">
+                            <span class="symbol-name">EUR/USD</span>
+                            <span class="symbol-price" id="EURUSD-price">1.0850</span>
+                            <span class="symbol-change" id="EURUSD-change">+0.12%</span>
+                        </div>
+                        <div class="symbol-item" data-symbol="GBPUSD">
+                            <span class="symbol-name">GBP/USD</span>
+                            <span class="symbol-price" id="GBPUSD-price">1.2650</span>
+                            <span class="symbol-change" id="GBPUSD-change">-0.08%</span>
+                        </div>
+                        <div class="symbol-item" data-symbol="USDJPY">
+                            <span class="symbol-name">USD/JPY</span>
+                            <span class="symbol-price" id="USDJPY-price">148.50</span>
+                            <span class="symbol-change" id="USDJPY-change">+0.25%</span>
+                        </div>
+                        <div class="symbol-item" data-symbol="AUDUSD">
+                            <span class="symbol-name">AUD/USD</span>
+                            <span class="symbol-price" id="AUDUSD-price">0.6580</span>
+                            <span class="symbol-change" id="AUDUSD-change">-0.15%</span>
+                        </div>
+                        <div class="symbol-item" data-symbol="USDCAD">
+                            <span class="symbol-name">USD/CAD</span>
+                            <span class="symbol-price" id="USDCAD-price">1.3520</span>
+                            <span class="symbol-change" id="USDCAD-change">+0.05%</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="sidebar-section">
+                    <h3><i class="fas fa-cog"></i> Settings</h3>
+                    <div class="settings-group">
+                        <label>Lot Size:</label>
+                        <input type="number" id="lotSize" value="0.1" step="0.01" min="0.01" max="100">
+                    </div>
+                    <div class="settings-group">
+                        <label>Stop Loss (pips):</label>
+                        <input type="number" id="stopLoss" value="50" min="1" max="1000">
+                    </div>
+                    <div class="settings-group">
+                        <label>Take Profit (pips):</label>
+                        <input type="number" id="takeProfit" value="100" min="1" max="1000">
+                    </div>
+                    <div class="settings-group">
+                        <label>Strategy:</label>
+                        <select id="strategy">
+                            <option value="ma-crossover">Moving Average Crossover</option>
+                            <option value="rsi">RSI Strategy</option>
+                            <option value="macd">MACD Strategy</option>
+                            <option value="bollinger">Bollinger Bands</option>
+                            <option value="stochastic">Stochastic Strategy</option>
+                            <option value="fibonacci">Fibonacci Retracement</option>
+                            <option value="support-resistance">Support/Resistance</option>
+                            <option value="volume-price">Volume-Price Analysis</option>
+                            <option value="machine-learning">Machine Learning</option>
+                            <option value="multi-timeframe">Multi-Timeframe</option>
+                            <option value="combined">Combined Strategies</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="sidebar-section">
+                    <h3><i class="fas fa-chart-bar"></i> Strategy Performance</h3>
+                    <div class="strategy-stats">
+                        <div class="stat-item">
+                            <span class="stat-label">Current Strategy:</span>
+                            <span class="stat-value" id="currentStrategy">MA Crossover</span>
+                        </div>
+                        <div class="stat-item">
+                            <span class="stat-label">Success Rate:</span>
+                            <span class="stat-value" id="strategySuccessRate">0%</span>
+                        </div>
+                        <div class="stat-item">
+                            <span class="stat-label">Avg Confidence:</span>
+                            <span class="stat-value" id="avgConfidence">0%</span>
+                        </div>
+                        <div class="stat-item">
+                            <span class="stat-label">Best Strategy:</span>
+                            <span class="stat-value" id="bestStrategy">-</span>
+                        </div>
+                    </div>
+                </div>
+            </aside>
+
+            <!-- Main Trading Area -->
+            <main class="main-trading-area">
+                <!-- Control Panel -->
+                <div class="control-panel">
+                    <div class="control-buttons">
+                        <button class="btn btn-primary" id="startDemo">
+                            <i class="fas fa-play"></i> Start Demo
+                        </button>
+                        <button class="btn btn-success" id="startLive">
+                            <i class="fas fa-rocket"></i> Start Live
+                        </button>
+                        <button class="btn btn-danger" id="stopTrading">
+                            <i class="fas fa-stop"></i> Stop
+                        </button>
+                        <button class="btn btn-info" id="backtest">
+                            <i class="fas fa-chart-bar"></i> Backtest
+                        </button>
+                    </div>
+                    <div class="current-symbol">
+                        <span id="currentSymbol">EUR/USD</span>
+                        <span class="current-price" id="currentPrice">1.0850</span>
+                    </div>
+                </div>
+
+                <!-- Performance Cards -->
+                <div class="performance-cards">
+                    <div class="card">
+                        <div class="card-icon">
+                            <i class="fas fa-dollar-sign"></i>
+                        </div>
+                        <div class="card-content">
+                            <h4>P&L</h4>
+                            <div class="card-value" id="pnlValue">$0.00</div>
+                            <div class="card-change" id="pnlChange">+0.00%</div>
+                        </div>
+                    </div>
+                    <div class="card">
+                        <div class="card-icon">
+                            <i class="fas fa-trophy"></i>
+                        </div>
+                        <div class="card-content">
+                            <h4>Win Rate</h4>
+                            <div class="card-value" id="winRate">0%</div>
+                            <div class="card-change" id="winRateChange">0/0</div>
+                        </div>
+                    </div>
+                    <div class="card">
+                        <div class="card-icon">
+                            <i class="fas fa-exchange-alt"></i>
+                        </div>
+                        <div class="card-content">
+                            <h4>Total Trades</h4>
+                            <div class="card-value" id="totalTrades">0</div>
+                            <div class="card-change" id="totalTradesChange">Today: 0</div>
+                        </div>
+                    </div>
+                    <div class="card">
+                        <div class="card-icon">
+                            <i class="fas fa-chart-line"></i>
+                        </div>
+                        <div class="card-content">
+                            <h4>Balance</h4>
+                            <div class="card-value" id="balance">$10,000.00</div>
+                            <div class="card-change" id="balanceChange">+0.00%</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Chart Area -->
+                <div class="chart-container">
+                    <div class="chart-header">
+                        <div class="chart-controls">
+                            <button class="timeframe-btn active" data-timeframe="1">1m</button>
+                            <button class="timeframe-btn" data-timeframe="5">5m</button>
+                            <button class="timeframe-btn" data-timeframe="15">15m</button>
+                            <button class="timeframe-btn" data-timeframe="30">30m</button>
+                            <button class="timeframe-btn" data-timeframe="60">1h</button>
+                            <button class="timeframe-btn" data-timeframe="240">4h</button>
+                            <button class="timeframe-btn" data-timeframe="D">1D</button>
+                        </div>
+                        <div class="chart-tools">
+                            <button class="tool-btn" id="drawingTools">
+                                <i class="fas fa-pencil-alt"></i>
+                            </button>
+                            <button class="tool-btn" id="indicators">
+                                <i class="fas fa-chart-area"></i>
+                            </button>
+                            <button class="tool-btn" id="fullscreen">
+                                <i class="fas fa-expand"></i>
+                            </button>
+                        </div>
+                    </div>
+                    <div id="tradingview-chart"></div>
+                </div>
+
+                <!-- Trading Panel -->
+                <div class="trading-panel">
+                    <div class="panel-header">
+                        <h3><i class="fas fa-trade"></i> Trading Panel</h3>
+                    </div>
+                    <div class="order-form">
+                        <div class="order-type">
+                            <button class="order-btn buy active" data-type="buy">BUY</button>
+                            <button class="order-btn sell" data-type="sell">SELL</button>
+                        </div>
+                        <div class="order-inputs">
+                            <div class="input-group">
+                                <label>Lot Size:</label>
+                                <input type="number" id="orderLotSize" value="0.1" step="0.01" min="0.01">
+                            </div>
+                            <div class="input-group">
+                                <label>Stop Loss:</label>
+                                <input type="number" id="orderStopLoss" value="50" min="1">
+                            </div>
+                            <div class="input-group">
+                                <label>Take Profit:</label>
+                                <input type="number" id="orderTakeProfit" value="100" min="1">
+                            </div>
+                        </div>
+                        <button class="btn btn-primary btn-block" id="placeOrder">
+                            <i class="fas fa-plus"></i> Place Order
+                        </button>
+                    </div>
+                </div>
+            </main>
+        </div>
+
+        <!-- Trading Log -->
+        <div class="trading-log">
+            <div class="log-header">
+                <h3><i class="fas fa-list"></i> Trading Log</h3>
+                <button class="clear-log" id="clearLog">
+                    <i class="fas fa-trash"></i> Clear
+                </button>
+            </div>
+            <div class="log-content" id="logContent">
+                <div class="log-entry info">
+                    <span class="log-time">12:00:00</span>
+                    <span class="log-message">Trading Bot Pro initialized successfully</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="renderer.js"></script>
+</body>
+</html>

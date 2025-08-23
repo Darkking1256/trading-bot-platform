@@ -1,0 +1,17 @@
+# Application Icon Placeholder
+
+To add a proper icon for your Trading Bot Pro application:
+
+1. Create a PNG file named "icon.png" in this directory
+2. Recommended size: 256x256 pixels
+3. You can use any icon design tool or download a free trading/robot icon
+
+For now, the application will use the default Electron icon.
+
+The icon will be used for:
+- Application window icon
+- Taskbar icon
+- Desktop shortcut icon
+- Installer icon
+
+

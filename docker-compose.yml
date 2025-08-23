@@ -1,0 +1,53 @@
+version: '3.8'
+
+services:
+  trading-bot-platform:
+    build: .
+    ports:
+      - "5000:5000"
+    environment:
+      - NODE_ENV=development
+      - PORT=5000
+      - JWT_SECRET=your-secret-key-change-in-production
+    volumes:
+      - .:/app
+      - /app/node_modules
+      - /app/client/node_modules
+    restart: unless-stopped
+    networks:
+      - trading-network
+
+  # Optional: Add MongoDB for persistent data
+  mongodb:
+    image: mongo:6.0
+    ports:
+      - "27017:27017"
+    environment:
+      - MONGO_INITDB_ROOT_USERNAME=admin
+      - MONGO_INITDB_ROOT_PASSWORD=password
+    volumes:
+      - mongodb_data:/data/db
+    networks:
+      - trading-network
+    profiles:
+      - database
+
+  # Optional: Add Redis for caching
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - trading-network
+    profiles:
+      - cache
+
+networks:
+  trading-network:
+    driver: bridge
+
+volumes:
+  mongodb_data:
+  redis_data:

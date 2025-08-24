@@ -31,7 +31,11 @@ const io = socketIo(server, {
 // Middleware
 app.use(cors());
 app.use(express.json());
-app.use(express.static(path.join(__dirname, 'client/build')));
+
+// Serve static files from the React app (only in production)
+if (isProduction) {
+  app.use(express.static(path.join(__dirname, 'client/build')));
+}
 
 // JWT Secret
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-change-in-production';
@@ -151,6 +155,17 @@ app.put('/api/user/preferences', authenticateToken, async (req, res) => {
     console.error('Update preferences error:', error);
     res.status(500).json({ error: error.message || 'Failed to update preferences' });
   }
+});
+
+// Health check endpoint for Railway
+app.get('/api/health', (req, res) => {
+  res.json({ 
+    status: 'healthy', 
+    timestamp: new Date().toISOString(),
+    environment: process.env.NODE_ENV || 'development',
+    database: 'connected', // You can add actual DB status check here
+    marketData: symbols.length > 0 ? 'active' : 'inactive'
+  });
 });
 
 // Market data routes
@@ -1932,12 +1947,15 @@ setInterval(async () => {
   }
 }, 2000); // Update every 2 seconds
 
-// Serve React app
-app.get('*', (req, res) => {
-  res.sendFile(path.join(__dirname, 'client/build', 'index.html'));
-});
+// Serve React app (only in production)
+if (isProduction) {
+  app.get('*', (req, res) => {
+    res.sendFile(path.join(__dirname, 'client/build', 'index.html'));
+  });
+}
 
 const PORT = process.env.PORT || 5000;
+const isProduction = process.env.NODE_ENV === 'production';
 
 // Initialize database and start server
 const startServer = async () => {

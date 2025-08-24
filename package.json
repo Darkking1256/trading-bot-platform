@@ -4,7 +4,7 @@
   "description": "Advanced algorithmic trading platform with social features",
   "main": "server.js",
   "scripts": {
-    "start": "node server.minimal.js",
+    "start": "node server.ultra-minimal.js",
     "dev": "nodemon server.js",
     "minimal": "node server.min.js",
     "build": "cd client && npm install && npm run build",

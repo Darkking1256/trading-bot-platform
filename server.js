@@ -8,7 +8,8 @@ const path = require('path');
 require('dotenv').config();
 
 // Import database and services
-const { initializeDatabase, testConnection } = require('./config/database');
+const { testConnection } = require('./config/database');
+const { initializeDatabase } = require('./models/index');
 const UserService = require('./services/UserService');
 const TradeService = require('./services/TradeService');
 const MarketDataService = require('./services/MarketDataService');

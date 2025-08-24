@@ -1,5 +1,4 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { io } from 'socket.io-client';
 import { 
   Play, 
   Square, 
@@ -11,19 +10,25 @@ import {
   AlertCircle,
   CheckCircle,
   Clock,
-  Activity
+  Activity,
+  Zap,
+  Wifi,
+  WifiOff
 } from 'lucide-react';
+import { socket, socketStatus, tradingEvents } from '../lib/socket';
+import { useDemoTicker } from '../hooks/useDemoTicker';
 
 const TradingBot = () => {
-  const [socket, setSocket] = useState(null);
   const [isConnected, setIsConnected] = useState(false);
   const [isTrading, setIsTrading] = useState(false);
+  const [isDemoMode, setIsDemoMode] = useState(false);
   const [currentStrategy, setCurrentStrategy] = useState('');
   const [selectedStrategy, setSelectedStrategy] = useState('Moving Average Crossover');
   const [strategyParams, setStrategyParams] = useState({});
   const [balance, setBalance] = useState(10000);
   const [positions, setPositions] = useState([]);
   const [trades, setTrades] = useState([]);
+  const [symbols, setSymbols] = useState({});
   const [performance, setPerformance] = useState({
     totalTrades: 0,
     winningTrades: 0,
@@ -36,26 +41,56 @@ const TradingBot = () => {
   const [availableStrategies, setAvailableStrategies] = useState([]);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
+  const [logs, setLogs] = useState([]);
 
   const socketRef = useRef();
 
+  // Demo ticker hook
+  useDemoTicker(
+    isDemoMode,
+    (tick) => {
+      setSymbols(prev => ({ ...prev, [tick.symbol]: tick }));
+    },
+    (perf) => {
+      setPerformance(prev => ({ ...prev, ...perf }));
+      setBalance(perf.balance);
+      if (perf.tradeHistory) {
+        setTrades(perf.tradeHistory);
+      }
+    }
+  );
+
   useEffect(() => {
-    // Initialize socket connection
-    const newSocket = io('http://localhost:5000');
-    socketRef.current = newSocket;
+    // Socket connection status
+    const updateConnectionStatus = () => {
+      setIsConnected(socketStatus.connected);
+      if (socketStatus.error) {
+        setError(`Connection error: ${socketStatus.error}`);
+      }
+    };
 
-    newSocket.on('connect', () => {
-      setIsConnected(true);
-      setError('');
-      console.log('Connected to trading server');
+    // Set up socket event listeners
+    tradingEvents.onTick((tick) => {
+      setSymbols(prev => ({ ...prev, [tick.symbol]: tick }));
     });
 
-    newSocket.on('disconnect', () => {
-      setIsConnected(false);
-      setError('Disconnected from server');
+    tradingEvents.onPerformanceUpdate((perf) => {
+      setPerformance(prev => ({ ...prev, ...perf }));
+      setBalance(perf.balance);
+      if (perf.tradeHistory) {
+        setTrades(perf.tradeHistory);
+      }
     });
 
-    newSocket.on('tradingStatus', (data) => {
+    tradingEvents.onTradeExecuted((data) => {
+      setTrades(prev => [...prev, data.trade]);
+      setBalance(data.balance);
+      setPerformance(data.performance);
+      setSuccess(`Trade executed: ${data.trade.action} ${data.trade.symbol} at ${data.trade.price}`);
+      setTimeout(() => setSuccess(''), 3000);
+    });
+
+    tradingEvents.onTradingStatus((data) => {
       setIsTrading(data.isRunning);
       setCurrentStrategy(data.strategy || '');
       setBalance(data.balance || 10000);
@@ -72,40 +107,29 @@ const TradingBot = () => {
       });
     });
 
-    newSocket.on('tradeExecuted', (data) => {
-      setTrades(prev => [...prev, data.trade]);
-      setBalance(data.balance);
-      setPerformance(data.performance);
-      setSuccess(`Trade executed: ${data.trade.action} ${data.trade.symbol} at ${data.trade.price}`);
-      setTimeout(() => setSuccess(''), 3000);
+    tradingEvents.onLog((message) => {
+      setLogs(prev => [...prev.slice(-9), { id: Date.now(), message, timestamp: new Date().toISOString() }]);
     });
 
-    newSocket.on('tradingError', (data) => {
+    tradingEvents.onError((data) => {
       setError(data.error);
       setTimeout(() => setError(''), 5000);
     });
 
-    newSocket.on('tradingStarted', (data) => {
-      setIsTrading(true);
-      setCurrentStrategy(data.strategy);
-      setSuccess(`Started ${data.strategy} strategy`);
-      setTimeout(() => setSuccess(''), 3000);
-    });
-
-    newSocket.on('tradingStopped', () => {
-      setIsTrading(false);
-      setCurrentStrategy('');
-      setSuccess('Trading stopped');
-      setTimeout(() => setSuccess(''), 3000);
-    });
-
-    setSocket(newSocket);
+    // Initial connection status
+    updateConnectionStatus();
 
     // Load available strategies
     fetchStrategies();
 
+    // Cleanup
     return () => {
-      newSocket.close();
+      tradingEvents.offTick();
+      tradingEvents.offPerformanceUpdate();
+      tradingEvents.offTradeExecuted();
+      tradingEvents.offTradingStatus();
+      tradingEvents.offLog();
+      tradingEvents.offError();
     };
   }, []);
 
@@ -119,19 +143,50 @@ const TradingBot = () => {
     }
   };
 
+  const startDemo = () => {
+    setIsDemoMode(true);
+    setSuccess('Demo mode started - simulating live trading');
+    setTimeout(() => setSuccess(''), 3000);
+  };
+
+  const startLiveTrading = () => {
+    if (!isConnected) {
+      setError('Not connected to trading server');
+      return;
+    }
+    setIsDemoMode(false);
+    tradingEvents.startLive({ symbols: Object.keys(symbols) });
+    setSuccess('Live trading started');
+    setTimeout(() => setSuccess(''), 3000);
+  };
+
   const startTrading = () => {
-    if (!socket || !selectedStrategy) return;
+    if (!isConnected) {
+      setError('Not connected to trading server');
+      return;
+    }
+    if (!selectedStrategy) return;
 
     const parameters = getStrategyParameters(selectedStrategy);
-    socket.emit('startTrading', {
-      strategy: selectedStrategy,
-      parameters
-    });
+    tradingEvents.startTrading(selectedStrategy, parameters);
   };
 
   const stopTrading = () => {
-    if (!socket) return;
-    socket.emit('stopTrading');
+    setIsDemoMode(false);
+    if (isConnected) {
+      tradingEvents.stopTrading();
+    }
+    setSuccess('Trading stopped');
+    setTimeout(() => setSuccess(''), 3000);
+  };
+
+  const stopAll = () => {
+    setIsDemoMode(false);
+    if (isConnected) {
+      tradingEvents.stopAll();
+    }
+    setSuccess('All trading stopped');
+    setTimeout(() => setSuccess(''), 3000);
   };
 
   const getStrategyParameters = (strategy) => {
@@ -279,44 +334,86 @@ const TradingBot = () => {
                 </div>
               </div>
 
-              {/* Trading Controls */}
-              <div className="space-y-3">
-                {!isTrading ? (
-                  <button
-                    onClick={startTrading}
-                    disabled={!isConnected}
-                    className="w-full bg-green-600 text-white py-2 px-4 rounded-md hover:bg-green-700 disabled:bg-gray-400 disabled:cursor-not-allowed flex items-center justify-center space-x-2"
-                  >
-                    <Play size={16} />
-                    <span>Start Trading</span>
-                  </button>
-                ) : (
-                  <button
-                    onClick={stopTrading}
-                    className="w-full bg-red-600 text-white py-2 px-4 rounded-md hover:bg-red-700 flex items-center justify-center space-x-2"
-                  >
-                    <Square size={16} />
-                    <span>Stop Trading</span>
-                  </button>
-                )}
-              </div>
+                             {/* Trading Controls */}
+               <div className="space-y-3">
+                 {/* Demo Mode */}
+                 <button
+                   onClick={startDemo}
+                   disabled={isDemoMode || isTrading}
+                   className="w-full bg-blue-600 text-white py-2 px-4 rounded-md hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed flex items-center justify-center space-x-2"
+                 >
+                   <Zap size={16} />
+                   <span>Start Demo</span>
+                 </button>
 
-              {/* Current Status */}
-              {isTrading && (
-                <div className="mt-6 p-4 bg-blue-50 rounded-md">
-                  <h3 className="text-sm font-medium text-blue-900 mb-2">Current Status</h3>
-                  <div className="space-y-1 text-sm text-blue-800">
-                    <div className="flex justify-between">
-                      <span>Strategy:</span>
-                      <span className="font-medium">{currentStrategy}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span>Status:</span>
-                      <span className="font-medium text-green-600">Active</span>
-                    </div>
-                  </div>
-                </div>
-              )}
+                 {/* Live Trading */}
+                 <button
+                   onClick={startLiveTrading}
+                   disabled={!isConnected || isDemoMode || isTrading}
+                   className="w-full bg-green-600 text-white py-2 px-4 rounded-md hover:bg-green-700 disabled:bg-gray-400 disabled:cursor-not-allowed flex items-center justify-center space-x-2"
+                 >
+                   <Wifi size={16} />
+                   <span>Start Live</span>
+                 </button>
+
+                 {/* Strategy Trading */}
+                 {!isTrading ? (
+                   <button
+                     onClick={startTrading}
+                     disabled={!isConnected || isDemoMode}
+                     className="w-full bg-purple-600 text-white py-2 px-4 rounded-md hover:bg-purple-700 disabled:bg-gray-400 disabled:cursor-not-allowed flex items-center justify-center space-x-2"
+                   >
+                     <Play size={16} />
+                     <span>Start Strategy</span>
+                   </button>
+                 ) : (
+                   <button
+                     onClick={stopTrading}
+                     className="w-full bg-red-600 text-white py-2 px-4 rounded-md hover:bg-red-700 flex items-center justify-center space-x-2"
+                   >
+                     <Square size={16} />
+                     <span>Stop Strategy</span>
+                   </button>
+                 )}
+
+                 {/* Stop All */}
+                 {(isDemoMode || isTrading) && (
+                   <button
+                     onClick={stopAll}
+                     className="w-full bg-gray-600 text-white py-2 px-4 rounded-md hover:bg-gray-700 flex items-center justify-center space-x-2"
+                   >
+                     <Square size={16} />
+                     <span>Stop All</span>
+                   </button>
+                 )}
+               </div>
+
+                             {/* Current Status */}
+               {(isTrading || isDemoMode) && (
+                 <div className="mt-6 p-4 bg-blue-50 rounded-md">
+                   <h3 className="text-sm font-medium text-blue-900 mb-2">Current Status</h3>
+                   <div className="space-y-1 text-sm text-blue-800">
+                     <div className="flex justify-between">
+                       <span>Mode:</span>
+                       <span className="font-medium">
+                         {isDemoMode ? 'Demo' : isTrading ? 'Live Trading' : 'Inactive'}
+                       </span>
+                     </div>
+                     {isTrading && (
+                       <div className="flex justify-between">
+                         <span>Strategy:</span>
+                         <span className="font-medium">{currentStrategy}</span>
+                       </div>
+                     )}
+                     <div className="flex justify-between">
+                       <span>Connection:</span>
+                       <span className={`font-medium ${isConnected ? 'text-green-600' : 'text-red-600'}`}>
+                         {isConnected ? 'Connected' : 'Disconnected'}
+                       </span>
+                     </div>
+                   </div>
+                 </div>
+               )}
             </div>
           </div>
 
@@ -426,12 +523,39 @@ const TradingBot = () => {
               </div>
             </div>
 
-            {/* Recent Trades */}
-            <div className="bg-white rounded-lg shadow-sm p-6 mt-6">
-              <h2 className="text-lg font-semibold text-gray-900 mb-4">Recent Trades</h2>
-              {trades.length === 0 ? (
-                <p className="text-sm text-gray-500">No trades yet</p>
-              ) : (
+                         {/* Live Market Data */}
+             <div className="bg-white rounded-lg shadow-sm p-6 mt-6">
+               <h2 className="text-lg font-semibold text-gray-900 mb-4">Live Market Data</h2>
+               {Object.keys(symbols).length === 0 ? (
+                 <p className="text-sm text-gray-500">No market data available. Start demo or connect to live feed.</p>
+               ) : (
+                 <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                   {Object.entries(symbols).map(([symbol, data]) => (
+                     <div key={symbol} className="bg-gray-50 p-3 rounded-lg">
+                       <div className="flex justify-between items-center">
+                         <span className="font-medium text-sm">{symbol}</span>
+                         <span className={`text-xs px-2 py-1 rounded ${
+                           data.change > 0 ? 'bg-green-100 text-green-800' : 
+                           data.change < 0 ? 'bg-red-100 text-red-800' : 'bg-gray-100 text-gray-800'
+                         }`}>
+                           {data.change > 0 ? '+' : ''}{data.change}%
+                         </span>
+                       </div>
+                       <div className="text-lg font-semibold mt-1">
+                         {data.price}
+                       </div>
+                     </div>
+                   ))}
+                 </div>
+               )}
+             </div>
+
+             {/* Recent Trades */}
+             <div className="bg-white rounded-lg shadow-sm p-6 mt-6">
+               <h2 className="text-lg font-semibold text-gray-900 mb-4">Recent Trades</h2>
+               {trades.length === 0 ? (
+                 <p className="text-sm text-gray-500">No trades yet</p>
+               ) : (
                 <div className="overflow-x-auto">
                   <table className="min-w-full divide-y divide-gray-200">
                     <thead className="bg-gray-50">
@@ -486,13 +610,32 @@ const TradingBot = () => {
                     </tbody>
                   </table>
                 </div>
-              )}
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-};
+                             )}
+             </div>
+
+             {/* Trading Logs */}
+             <div className="bg-white rounded-lg shadow-sm p-6 mt-6">
+               <h2 className="text-lg font-semibold text-gray-900 mb-4">Trading Logs</h2>
+               {logs.length === 0 ? (
+                 <p className="text-sm text-gray-500">No logs yet. Start trading to see activity.</p>
+               ) : (
+                 <div className="space-y-2 max-h-40 overflow-y-auto">
+                   {logs.map((log) => (
+                     <div key={log.id} className="text-sm text-gray-600 border-l-2 border-blue-500 pl-3">
+                       <span className="text-gray-400 text-xs">
+                         {new Date(log.timestamp).toLocaleTimeString()}
+                       </span>
+                       <span className="ml-2">{log.message}</span>
+                     </div>
+                   ))}
+                 </div>
+               )}
+             </div>
+           </div>
+         </div>
+       </div>
+     </div>
+   );
+ };
 
 export default TradingBot;

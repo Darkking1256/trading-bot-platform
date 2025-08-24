@@ -32,6 +32,9 @@ const io = socketIo(server, {
 app.use(cors());
 app.use(express.json());
 
+// Production environment detection
+const isProduction = process.env.NODE_ENV === 'production';
+
 // Serve static files from the React app (only in production)
 if (isProduction) {
   app.use(express.static(path.join(__dirname, 'client/build')));
@@ -163,8 +166,10 @@ app.get('/api/health', (req, res) => {
     status: 'healthy', 
     timestamp: new Date().toISOString(),
     environment: process.env.NODE_ENV || 'development',
-    database: 'connected', // You can add actual DB status check here
-    marketData: symbols.length > 0 ? 'active' : 'inactive'
+    database: 'demo_mode', // Running in demo mode without database
+    marketData: symbols.length > 0 ? 'active' : 'inactive',
+    port: PORT,
+    uptime: process.uptime()
   });
 });
 
@@ -1955,7 +1960,6 @@ if (isProduction) {
 }
 
 const PORT = process.env.PORT || 5000;
-const isProduction = process.env.NODE_ENV === 'production';
 
 // Initialize database and start server
 const startServer = async () => {

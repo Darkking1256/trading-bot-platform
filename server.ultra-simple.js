@@ -51,6 +51,16 @@ app.get('/api/test', (req, res) => {
   });
 });
 
+// Keep-alive endpoint to prevent Railway from stopping the container
+app.get('/api/keepalive', (req, res) => {
+  console.log('💓 Keep-alive ping received');
+  res.json({ 
+    status: 'alive',
+    timestamp: new Date().toISOString(),
+    uptime: process.uptime()
+  });
+});
+
 // Start server
 server.listen(PORT, () => {
   console.log(`🚀 Ultra-simple Railway server running on port ${PORT}`);
@@ -58,6 +68,7 @@ server.listen(PORT, () => {
   console.log(`✅ Health check: http://localhost:${PORT}/api/health`);
   console.log(`🧪 Test endpoint: http://localhost:${PORT}/api/test`);
   console.log(`🏠 Root endpoint: http://localhost:${PORT}/`);
+  console.log(`💓 Keep-alive: http://localhost:${PORT}/api/keepalive`);
 });
 
 // Handle server errors
@@ -84,5 +95,10 @@ process.on('SIGINT', () => {
     process.exit(0);
   });
 });
+
+// Keep the process alive
+setInterval(() => {
+  console.log('💓 Server heartbeat - still running...');
+}, 30000); // Log every 30 seconds
 
 module.exports = { app, server };

@@ -11,6 +11,7 @@ import SocialTrading from './pages/SocialTrading';
 import RiskManagement from './pages/RiskManagement';
 import AdvancedAnalytics from './pages/AdvancedAnalytics';
 import AlgorithmicTrading from './pages/AlgorithmicTrading';
+import MarketData from './components/MarketData';
 import Positions from './pages/Positions';
 import History from './pages/History';
 import Settings from './pages/Settings';
@@ -54,15 +55,16 @@ function App() {
       <Layout>
         <Routes>
           <Route path="/" element={<Navigate to="/dashboard" replace />} />
-                                  <Route path="/dashboard" element={<Dashboard />} />
-                        <Route path="/trading" element={<TradingView />} />
-                        <Route path="/portfolio" element={<Portfolio />} />
-                        <Route path="/social-trading" element={<SocialTrading />} />
-                        <Route path="/risk-management" element={<RiskManagement />} />
-                        <Route path="/advanced-analytics" element={<AdvancedAnalytics />} />
-                        <Route path="/algorithmic-trading" element={<AlgorithmicTrading />} />
-                        <Route path="/positions" element={<Positions />} />
-                        <Route path="/history" element={<History />} />
+          <Route path="/dashboard" element={<Dashboard />} />
+          <Route path="/trading" element={<TradingView />} />
+          <Route path="/portfolio" element={<Portfolio />} />
+          <Route path="/social-trading" element={<SocialTrading />} />
+          <Route path="/risk-management" element={<RiskManagement />} />
+          <Route path="/advanced-analytics" element={<AdvancedAnalytics />} />
+          <Route path="/algorithmic-trading" element={<AlgorithmicTrading />} />
+          <Route path="/market-data" element={<MarketData />} />
+          <Route path="/positions" element={<Positions />} />
+          <Route path="/history" element={<History />} />
           <Route path="/settings" element={<Settings />} />
           <Route path="*" element={<Navigate to="/dashboard" replace />} />
         </Routes>

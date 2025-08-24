@@ -5,6 +5,7 @@ const User = require('./User');
 const Account = require('./Account');
 const Trade = require('./Trade');
 const Strategy = require('./Strategy');
+const MarketData = require('./MarketData');
 
 // Define associations
 User.hasMany(Account, {
@@ -177,5 +178,6 @@ module.exports = {
   Account,
   Trade,
   Strategy,
+  MarketData,
   initializeDatabase
 };

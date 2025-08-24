@@ -14,6 +14,7 @@ const UserService = require('./services/UserService');
 const TradeService = require('./services/TradeService');
 const MarketDataService = require('./services/MarketDataService');
 const marketDataRoutes = require('./routes/marketData');
+const brokerRoutes = require('./routes/broker');
 
 const app = express();
 const server = http.createServer(app);
@@ -150,6 +151,9 @@ app.put('/api/user/preferences', authenticateToken, async (req, res) => {
 
 // Market data routes
 app.use('/api/market', marketDataRoutes);
+
+// Broker routes
+app.use('/api/broker', brokerRoutes);
 
 // Socket.IO connection handling
 io.on('connection', (socket) => {

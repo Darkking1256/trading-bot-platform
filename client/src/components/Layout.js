@@ -14,7 +14,8 @@ import {
   Shield,
   Brain,
   Bot,
-  BarChart
+  BarChart,
+  Building2
 } from 'lucide-react';
 
 const Layout = ({ children }) => {
@@ -30,6 +31,7 @@ const Layout = ({ children }) => {
     { name: 'Advanced Analytics', href: '/advanced-analytics', icon: Brain },
     { name: 'Algorithmic Trading', href: '/algorithmic-trading', icon: Bot },
     { name: 'Market Data', href: '/market-data', icon: BarChart },
+    { name: 'Broker Connection', href: '/broker-connection', icon: Building2 },
     { name: 'Positions', href: '/positions', icon: Activity },
     { name: 'History', href: '/history', icon: History },
     { name: 'Settings', href: '/settings', icon: Settings },

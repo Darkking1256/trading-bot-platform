@@ -12,6 +12,7 @@ import RiskManagement from './pages/RiskManagement';
 import AdvancedAnalytics from './pages/AdvancedAnalytics';
 import AlgorithmicTrading from './pages/AlgorithmicTrading';
 import MarketData from './components/MarketData';
+import BrokerConnection from './components/BrokerConnection';
 import Positions from './pages/Positions';
 import History from './pages/History';
 import Settings from './pages/Settings';
@@ -63,6 +64,7 @@ function App() {
           <Route path="/advanced-analytics" element={<AdvancedAnalytics />} />
           <Route path="/algorithmic-trading" element={<AlgorithmicTrading />} />
           <Route path="/market-data" element={<MarketData />} />
+          <Route path="/broker-connection" element={<BrokerConnection />} />
           <Route path="/positions" element={<Positions />} />
           <Route path="/history" element={<History />} />
           <Route path="/settings" element={<Settings />} />

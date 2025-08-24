@@ -30,11 +30,9 @@ import {
   CheckCircle,
   XCircle,
   Info,
-  Brain,
-  LineChart,
-  PieChart
+  Brain
 } from 'lucide-react';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, AreaChart, Area, PieChart, Pie, Cell } from 'recharts';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, AreaChart, Area, PieChart, Pie, Cell, ScatterChart, Scatter } from 'recharts';
 import toast from 'react-hot-toast';
 
 const BacktestingEngine = () => {

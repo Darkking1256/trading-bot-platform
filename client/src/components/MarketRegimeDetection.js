@@ -29,8 +29,6 @@ import {
   Minus as MinusIcon,
   X,
   Brain,
-  LineChart,
-  PieChart,
   Gauge,
   Activity as ActivityIcon,
   Target as TargetIcon

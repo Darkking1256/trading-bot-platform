@@ -28,8 +28,6 @@ import {
   Minus,
   X,
   Brain,
-  LineChart,
-  PieChart,
   MessageSquare,
   Newspaper,
   Twitter,
@@ -265,9 +263,10 @@ const SentimentAnalysis = () => {
               <div key={source} className="flex items-center justify-between p-3 bg-gray-700 rounded-lg">
                 <div className="flex items-center space-x-3">
                   <div className="text-blue-500">
-                    {sources.find(s => s.value === source)?.icon && 
-                      <sources.find(s => s.value === source).icon className="h-5 w-5" />
-                    }
+                    {(() => {
+                      const sourceObj = sources.find(s => s.value === source);
+                      return sourceObj?.icon ? <sourceObj.icon className="h-5 w-5" /> : null;
+                    })()}
                   </div>
                   <div>
                     <div className="text-white font-medium">{sources.find(s => s.value === source)?.label || source}</div>

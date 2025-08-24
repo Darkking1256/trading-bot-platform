@@ -5,12 +5,20 @@ const cors = require('cors');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const path = require('path');
+require('dotenv').config();
+
+// Import database and services
+const { initializeDatabase, testConnection } = require('./config/database');
+const UserService = require('./services/UserService');
+const TradeService = require('./services/TradeService');
 
 const app = express();
 const server = http.createServer(app);
 const io = socketIo(server, {
   cors: {
-    origin: "http://localhost:3000",
+    origin: process.env.NODE_ENV === 'production' 
+      ? process.env.FRONTEND_URL || "*"
+      : "http://localhost:3000",
     methods: ["GET", "POST"]
   }
 });
@@ -20,31 +28,19 @@ app.use(cors());
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'client/build')));
 
-// JWT Secret (in production, use environment variable)
-const JWT_SECRET = 'your-secret-key-change-in-production';
+// JWT Secret
+const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-change-in-production';
 
-// In-memory storage (in production, use a database)
-const users = [
-  {
-    id: 1,
-    username: 'demo',
-    email: 'demo@example.com',
-    password: '$2a$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi', // password123
-    balance: 10000,
-    equity: 10000,
-    margin: 0,
-    freeMargin: 10000,
-    marginLevel: 0,
-    accountType: 'Demo'
-  }
-];
-
-const trades = [];
-const positions = [];
+// Market data (will be replaced with real data later)
 const marketData = {};
-
-// Simulate market data
 const symbols = ['EURUSD', 'GBPUSD', 'USDJPY', 'USDCHF', 'AUDUSD', 'USDCAD'];
+symbols.forEach(symbol => {
+  marketData[symbol] = {
+    bid: 1.0850 + Math.random() * 0.1,
+    ask: 1.0850 + Math.random() * 0.1,
+    timestamp: Date.now()
+  };
+});
 symbols.forEach(symbol => {
   marketData[symbol] = {
     bid: 1.0850 + Math.random() * 0.1,
@@ -76,35 +72,25 @@ app.post('/api/auth/register', async (req, res) => {
   try {
     const { username, email, password } = req.body;
 
-    // Check if user already exists
-    const existingUser = users.find(u => u.username === username || u.email === email);
-    if (existingUser) {
-      return res.status(400).json({ error: 'User already exists' });
-    }
-
-    // Hash password
-    const hashedPassword = await bcrypt.hash(password, 10);
-
-    // Create new user
-    const newUser = {
-      id: users.length + 1,
+    // Create user using service
+    const user = await UserService.createUser({
       username,
       email,
-      password: hashedPassword,
-      balance: 10000,
-      equity: 10000,
-      margin: 0,
-      freeMargin: 10000,
-      marginLevel: 0,
-      accountType: 'Demo'
-    };
+      password
+    });
 
-    users.push(newUser);
+    // Generate token
+    const token = UserService.generateToken(user);
 
-    res.json({ success: true, message: 'User registered successfully' });
+    res.json({ 
+      success: true, 
+      message: 'User registered successfully',
+      token,
+      user
+    });
   } catch (error) {
     console.error('Registration error:', error);
-    res.status(500).json({ error: 'Registration failed' });
+    res.status(500).json({ error: error.message || 'Registration failed' });
   }
 });
 
@@ -112,52 +98,61 @@ app.post('/api/auth/login', async (req, res) => {
   try {
     const { username, password } = req.body;
 
-    // Find user
-    const user = users.find(u => u.username === username);
-    if (!user) {
-      return res.status(401).json({ error: 'Invalid credentials' });
-    }
-
-    // Check password
-    const validPassword = await bcrypt.compare(password, user.password);
-    if (!validPassword) {
-      return res.status(401).json({ error: 'Invalid credentials' });
-    }
-
+    // Authenticate user
+    const user = await UserService.authenticate(username, password);
+    
     // Generate token
-    const token = jwt.sign(
-      { id: user.id, username: user.username },
-      JWT_SECRET,
-      { expiresIn: '24h' }
-    );
-
-    // Remove password from response
-    const { password: _, ...userWithoutPassword } = user;
+    const token = UserService.generateToken(user);
 
     res.json({
       success: true,
       token,
-      user: userWithoutPassword
+      user
     });
   } catch (error) {
     console.error('Login error:', error);
-    res.status(500).json({ error: 'Login failed' });
+    res.status(401).json({ error: error.message || 'Login failed' });
   }
 });
 
-app.post('/api/auth/verify', authenticateToken, (req, res) => {
-  const user = users.find(u => u.id === req.user.id);
-  if (!user) {
-    return res.status(404).json({ error: 'User not found' });
-  }
+app.post('/api/auth/verify', authenticateToken, async (req, res) => {
+  try {
+    const user = await UserService.findById(req.user.id);
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
 
-  const { password: _, ...userWithoutPassword } = user;
-  res.json({ success: true, user: userWithoutPassword });
+    res.json({ success: true, user });
+  } catch (error) {
+    console.error('Token verification error:', error);
+    res.status(500).json({ error: 'Token verification failed' });
+  }
 });
 
 app.post('/api/auth/logout', (req, res) => {
   // In a real application, you might want to blacklist the token
   res.json({ success: true, message: 'Logged out successfully' });
+});
+
+// User routes
+app.get('/api/user/profile', authenticateToken, async (req, res) => {
+  try {
+    const profile = await UserService.getUserProfile(req.user.id);
+    res.json({ success: true, profile });
+  } catch (error) {
+    console.error('Get profile error:', error);
+    res.status(500).json({ error: error.message || 'Failed to get profile' });
+  }
+});
+
+app.put('/api/user/preferences', authenticateToken, async (req, res) => {
+  try {
+    const user = await UserService.updatePreferences(req.user.id, req.body);
+    res.json({ success: true, user });
+  } catch (error) {
+    console.error('Update preferences error:', error);
+    res.status(500).json({ error: error.message || 'Failed to update preferences' });
+  }
 });
 
 // Socket.IO connection handling
@@ -1870,10 +1865,28 @@ app.get('*', (req, res) => {
 
 const PORT = process.env.PORT || 5000;
 
-server.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
-  console.log(`React app will be served from http://localhost:${PORT}`);
-  console.log(`API endpoints available at http://localhost:${PORT}/api`);
-});
+// Initialize database and start server
+const startServer = async () => {
+  try {
+    // Test database connection
+    await testConnection();
+    
+    // Initialize database (create tables, default data)
+    await initializeDatabase();
+    
+    // Start server
+    server.listen(PORT, () => {
+      console.log(`🚀 Server running on port ${PORT}`);
+      console.log(`📱 React app will be served from http://localhost:${PORT}`);
+      console.log(`🔌 API endpoints available at http://localhost:${PORT}/api`);
+      console.log(`💾 Database connected successfully`);
+    });
+  } catch (error) {
+    console.error('❌ Failed to start server:', error);
+    process.exit(1);
+  }
+};
+
+startServer();
 
 module.exports = { app, server, io };

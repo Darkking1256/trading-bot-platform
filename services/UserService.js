@@ -1,318 +1,265 @@
-const bcrypt = require('bcryptjs');
+const { User, Account } = require('../models');
 const jwt = require('jsonwebtoken');
-const { v4: uuidv4 } = require('uuid');
+const bcrypt = require('bcryptjs');
 
 class UserService {
-  constructor() {
-    this.users = new Map();
-    this.sessions = new Map();
-    
-    // Create default demo account
-    this.createDemoAccount();
+  // Create new user
+  static async createUser(userData) {
+    try {
+      const user = await User.create(userData);
+      
+      // Create default demo account for new user
+      await Account.create({
+        userId: user.id,
+        accountNumber: `ACC${Date.now()}`,
+        accountType: 'demo',
+        balance: 10000.00,
+        equity: 10000.00,
+        freeMargin: 10000.00,
+        currency: 'USD',
+        leverage: 100
+      });
+      
+      return user.toJSON();
+    } catch (error) {
+      if (error.name === 'SequelizeUniqueConstraintError') {
+        throw new Error('Username or email already exists');
+      }
+      throw error;
+    }
   }
 
-  createDemoAccount() {
-    const demoUser = {
-      id: 'demo-user-001',
-      username: 'demo',
-      email: 'demo@tradingplatform.com',
-      password: bcrypt.hashSync('demo123', 10),
-      accountType: 'DEMO',
-      balance: 10000,
-      leverage: 100,
-      currency: 'USD',
-      createdAt: new Date().toISOString(),
-      lastLogin: null,
-      preferences: {
-        defaultSymbol: 'EURUSD',
-        defaultTimeframe: '1H',
-        theme: 'dark',
-        language: 'en',
-        notifications: {
-          email: false,
-          push: true,
-          sound: true
-        },
-        chartSettings: {
-          defaultIndicators: ['SMA', 'RSI'],
-          chartType: 'candlestick',
-          gridLines: true,
-          volume: true
-        }
-      }
-    };
-
-    this.users.set(demoUser.id, demoUser);
-    console.log('Demo account created');
+  // Find user by ID
+  static async findById(id) {
+    try {
+      const user = await User.findByPk(id, {
+        include: [{
+          model: Account,
+          as: 'accounts'
+        }]
+      });
+      return user ? user.toJSON() : null;
+    } catch (error) {
+      throw error;
+    }
   }
 
-  async register(userData) {
-    const { username, email, password, accountType = 'DEMO' } = userData;
-
-    // Validate input
-    if (!username || !email || !password) {
-      throw new Error('Missing required fields');
+  // Find user by email
+  static async findByEmail(email) {
+    try {
+      const user = await User.findOne({
+        where: { email },
+        include: [{
+          model: Account,
+          as: 'accounts'
+        }]
+      });
+      return user;
+    } catch (error) {
+      throw error;
     }
-
-    if (password.length < 6) {
-      throw new Error('Password must be at least 6 characters long');
-    }
-
-    // Check if user already exists
-    const existingUser = Array.from(this.users.values()).find(
-      user => user.username === username || user.email === email
-    );
-
-    if (existingUser) {
-      throw new Error('User already exists');
-    }
-
-    // Create new user
-    const userId = uuidv4();
-    const hashedPassword = await bcrypt.hash(password, 10);
-
-    const newUser = {
-      id: userId,
-      username,
-      email,
-      password: hashedPassword,
-      accountType,
-      balance: accountType === 'DEMO' ? 10000 : 0,
-      leverage: 100,
-      currency: 'USD',
-      createdAt: new Date().toISOString(),
-      lastLogin: null,
-      preferences: {
-        defaultSymbol: 'EURUSD',
-        defaultTimeframe: '1H',
-        theme: 'dark',
-        language: 'en',
-        notifications: {
-          email: false,
-          push: true,
-          sound: true
-        },
-        chartSettings: {
-          defaultIndicators: ['SMA', 'RSI'],
-          chartType: 'candlestick',
-          gridLines: true,
-          volume: true
-        }
-      }
-    };
-
-    this.users.set(userId, newUser);
-
-    return {
-      success: true,
-      user: {
-        id: newUser.id,
-        username: newUser.username,
-        email: newUser.email,
-        accountType: newUser.accountType,
-        balance: newUser.balance,
-        preferences: newUser.preferences
-      }
-    };
   }
 
-  async login(credentials) {
-    const { username, password } = credentials;
-
-    if (!username || !password) {
-      throw new Error('Username and password are required');
+  // Find user by username
+  static async findByUsername(username) {
+    try {
+      const user = await User.findOne({
+        where: { username },
+        include: [{
+          model: Account,
+          as: 'accounts'
+        }]
+      });
+      return user;
+    } catch (error) {
+      throw error;
     }
+  }
 
-    // Find user
-    const user = Array.from(this.users.values()).find(
-      u => u.username === username || u.email === username
-    );
+  // Authenticate user
+  static async authenticate(email, password) {
+    try {
+      const user = await this.findByEmail(email);
+      if (!user) {
+        throw new Error('Invalid credentials');
+      }
 
-    if (!user) {
-      throw new Error('Invalid credentials');
+      const isValidPassword = await user.validatePassword(password);
+      if (!isValidPassword) {
+        throw new Error('Invalid credentials');
+      }
+
+      if (!user.isActive) {
+        throw new Error('Account is deactivated');
+      }
+
+      // Update last login
+      await user.update({ lastLogin: new Date() });
+
+      return user.toJSON();
+    } catch (error) {
+      throw error;
     }
+  }
 
-    // Verify password
-    const isValidPassword = await bcrypt.compare(password, user.password);
-    if (!isValidPassword) {
-      throw new Error('Invalid credentials');
-    }
-
-    // Update last login
-    user.lastLogin = new Date().toISOString();
-    this.users.set(user.id, user);
-
-    // Generate JWT token
-    const token = jwt.sign(
-      { userId: user.id, username: user.username },
+  // Generate JWT token
+  static generateToken(user) {
+    return jwt.sign(
+      {
+        id: user.id,
+        email: user.email,
+        username: user.username,
+        role: user.role
+      },
       process.env.JWT_SECRET || 'your-secret-key',
       { expiresIn: '24h' }
     );
-
-    // Store session
-    this.sessions.set(token, {
-      userId: user.id,
-      createdAt: new Date().toISOString(),
-      lastActivity: new Date().toISOString()
-    });
-
-    return {
-      success: true,
-      token,
-      user: {
-        id: user.id,
-        username: user.username,
-        email: user.email,
-        accountType: user.accountType,
-        balance: user.balance,
-        preferences: user.preferences
-      }
-    };
   }
 
-  async logout(token) {
-    if (this.sessions.has(token)) {
-      this.sessions.delete(token);
-    }
-    return { success: true };
-  }
-
-  async authenticate(token) {
-    if (!token) {
-      throw new Error('No token provided');
-    }
-
+  // Update user
+  static async updateUser(id, updateData) {
     try {
-      const decoded = jwt.verify(token, process.env.JWT_SECRET || 'your-secret-key');
-      const session = this.sessions.get(token);
-
-      if (!session) {
-        throw new Error('Session not found');
-      }
-
-      const user = this.users.get(decoded.userId);
+      const user = await User.findByPk(id);
       if (!user) {
         throw new Error('User not found');
       }
 
-      // Update last activity
-      session.lastActivity = new Date().toISOString();
-      this.sessions.set(token, session);
+      // Remove sensitive fields from update
+      delete updateData.password;
+      delete updateData.email; // Email should be updated through separate process
+      delete updateData.role; // Role should be updated by admin only
+
+      await user.update(updateData);
+      return user.toJSON();
+    } catch (error) {
+      throw error;
+    }
+  }
+
+  // Change password
+  static async changePassword(id, currentPassword, newPassword) {
+    try {
+      const user = await User.findByPk(id);
+      if (!user) {
+        throw new Error('User not found');
+      }
+
+      const isValidPassword = await user.validatePassword(currentPassword);
+      if (!isValidPassword) {
+        throw new Error('Current password is incorrect');
+      }
+
+      user.password = newPassword;
+      await user.save();
+
+      return { message: 'Password updated successfully' };
+    } catch (error) {
+      throw error;
+    }
+  }
+
+  // Get user profile with accounts and stats
+  static async getUserProfile(id) {
+    try {
+      const user = await User.findByPk(id, {
+        include: [{
+          model: Account,
+          as: 'accounts',
+          include: [{
+            model: require('../models/Trade'),
+            as: 'trades',
+            where: { status: 'OPEN' },
+            required: false
+          }]
+        }]
+      });
+
+      if (!user) {
+        throw new Error('User not found');
+      }
+
+      const profile = user.toJSON();
+      
+      // Calculate account statistics
+      profile.accounts = profile.accounts.map(account => {
+        const openTrades = account.trades || [];
+        const totalPnL = openTrades.reduce((sum, trade) => sum + parseFloat(trade.profit || 0), 0);
+        
+        return {
+          ...account,
+          openPositions: openTrades.length,
+          unrealizedPnL: totalPnL,
+          totalPnL: parseFloat(account.equity) - parseFloat(account.balance) + totalPnL
+        };
+      });
+
+      return profile;
+    } catch (error) {
+      throw error;
+    }
+  }
+
+  // Get all users (admin only)
+  static async getAllUsers(page = 1, limit = 20) {
+    try {
+      const offset = (page - 1) * limit;
+      
+      const { count, rows } = await User.findAndCountAll({
+        limit,
+        offset,
+        order: [['createdAt', 'DESC']],
+        include: [{
+          model: Account,
+          as: 'accounts'
+        }]
+      });
 
       return {
-        success: true,
-        user: {
-          id: user.id,
-          username: user.username,
-          email: user.email,
-          accountType: user.accountType,
-          balance: user.balance,
-          preferences: user.preferences
+        users: rows.map(user => user.toJSON()),
+        pagination: {
+          page,
+          limit,
+          total: count,
+          pages: Math.ceil(count / limit)
         }
       };
     } catch (error) {
-      throw new Error('Invalid token');
+      throw error;
     }
   }
 
-  async updatePreferences(userId, preferences) {
-    const user = this.users.get(userId);
-    if (!user) {
-      throw new Error('User not found');
-    }
-
-    // Merge preferences
-    user.preferences = { ...user.preferences, ...preferences };
-    this.users.set(userId, user);
-
-    return {
-      success: true,
-      preferences: user.preferences
-    };
-  }
-
-  async updateBalance(userId, newBalance) {
-    const user = this.users.get(userId);
-    if (!user) {
-      throw new Error('User not found');
-    }
-
-    user.balance = newBalance;
-    this.users.set(userId, user);
-
-    return {
-      success: true,
-      balance: user.balance
-    };
-  }
-
-  async getUserById(userId) {
-    const user = this.users.get(userId);
-    if (!user) {
-      throw new Error('User not found');
-    }
-
-    return {
-      id: user.id,
-      username: user.username,
-      email: user.email,
-      accountType: user.accountType,
-      balance: user.balance,
-      leverage: user.leverage,
-      currency: user.currency,
-      createdAt: user.createdAt,
-      lastLogin: user.lastLogin,
-      preferences: user.preferences
-    };
-  }
-
-  async getAllUsers() {
-    return Array.from(this.users.values()).map(user => ({
-      id: user.id,
-      username: user.username,
-      email: user.email,
-      accountType: user.accountType,
-      balance: user.balance,
-      createdAt: user.createdAt,
-      lastLogin: user.lastLogin
-    }));
-  }
-
-  async deleteUser(userId) {
-    if (!this.users.has(userId)) {
-      throw new Error('User not found');
-    }
-
-    this.users.delete(userId);
-    
-    // Remove user sessions
-    for (const [token, session] of this.sessions.entries()) {
-      if (session.userId === userId) {
-        this.sessions.delete(token);
+  // Delete user (admin only)
+  static async deleteUser(id) {
+    try {
+      const user = await User.findByPk(id);
+      if (!user) {
+        throw new Error('User not found');
       }
+
+      await user.destroy();
+      return { message: 'User deleted successfully' };
+    } catch (error) {
+      throw error;
     }
-
-    return { success: true };
   }
 
-  getActiveSessions() {
-    return Array.from(this.sessions.entries()).map(([token, session]) => ({
-      token: token.substring(0, 20) + '...',
-      userId: session.userId,
-      createdAt: session.createdAt,
-      lastActivity: session.lastActivity
-    }));
-  }
-
-  cleanupExpiredSessions() {
-    const now = new Date();
-    const maxAge = 24 * 60 * 60 * 1000; // 24 hours
-
-    for (const [token, session] of this.sessions.entries()) {
-      const sessionAge = now - new Date(session.lastActivity);
-      if (sessionAge > maxAge) {
-        this.sessions.delete(token);
+  // Update user preferences
+  static async updatePreferences(id, preferences) {
+    try {
+      const user = await User.findByPk(id);
+      if (!user) {
+        throw new Error('User not found');
       }
+
+      const updatedPreferences = {
+        ...user.preferences,
+        ...preferences
+      };
+
+      await user.update({ preferences: updatedPreferences });
+      return user.toJSON();
+    } catch (error) {
+      throw error;
     }
   }
 }

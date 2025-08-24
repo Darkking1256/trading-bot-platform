@@ -1,120 +1,46 @@
 {
-  "name": "real-trading-bot",
+  "name": "trading-bot-platform",
   "version": "1.0.0",
-  "description": "Professional automated trading bot with real broker integration and risk management",
-  "main": "main.js",
+  "description": "Advanced algorithmic trading platform with social features",
+  "main": "server.js",
   "scripts": {
-    "start": "electron .",
-    "server": "node server.js",
-    "client": "cd client && npm start",
-    "dev": "concurrently \"npm run server\" \"npm run client\"",
-    "demo": "node demo_mode.js",
-    "live": "node example.js live",
-    "backtest": "node example.js backtest",
-    "multi": "node example.js multi",
-    "test": "echo \"Error: no test specified\" && exit 1",
-    "install-deps": "npm install axios ws technicalindicators moment uuid dotenv node-fetch",
-    "build": "electron-builder",
-    "build-win": "electron-builder --win",
-    "build-portable": "electron-builder --win portable",
-    "pack": "electron-builder --dir",
-    "dist": "electron-builder",
-    "postinstall": "electron-builder install-app-deps"
+    "start": "node server.js",
+    "dev": "nodemon server.js",
+    "build": "cd client && npm run build",
+    "install-client": "cd client && npm install",
+    "build-client": "cd client && npm run build",
+    "heroku-postbuild": "npm run install-client && npm run build-client",
+    "setup-db": "node scripts/setup-database.js",
+    "db:reset": "node scripts/setup-database.js --reset"
   },
-  "keywords": [
-    "trading",
-    "bot",
-    "automated",
-    "forex",
-    "algorithmic",
-    "oanda",
-    "fxcm",
-    "interactive-brokers",
-    "risk-management",
-    "moving-average",
-    "trading-strategy",
-    "desktop-app",
-    "electron"
-  ],
-  "author": "Trading Bot Developer",
-  "license": "MIT",
   "dependencies": {
-    "axios": "^1.6.0",
-    "dotenv": "^16.3.1",
-    "moment": "^2.29.4",
-    "technicalindicators": "^3.1.0",
-    "uuid": "^9.0.1",
-    "ws": "^8.14.0",
     "express": "^4.18.2",
     "socket.io": "^4.7.2",
     "cors": "^2.8.5",
     "bcryptjs": "^2.4.3",
-    "jsonwebtoken": "^9.0.2"
+    "jsonwebtoken": "^9.0.2",
+    "pg": "^8.11.3",
+    "sequelize": "^6.35.0",
+    "dotenv": "^16.3.1",
+    "helmet": "^7.1.0",
+    "express-rate-limit": "^7.1.5",
+    "compression": "^1.7.4"
   },
   "devDependencies": {
-    "electron": "^27.3.11",
-    "electron-builder": "^24.13.3",
     "nodemon": "^3.0.1"
   },
   "engines": {
-    "node": ">=16.0.0",
-    "npm": ">=8.0.0"
+    "node": ">=16.0.0"
   },
-  "repository": {
-    "type": "git",
-    "url": "https://github.com/yourusername/real-trading-bot.git"
-  },
-  "bugs": {
-    "url": "https://github.com/yourusername/real-trading-bot/issues"
-  },
-  "homepage": "https://github.com/yourusername/real-trading-bot#readme",
-  "files": [
-    "TradingBot.js",
-    "config.js",
-    "example.js",
-    "strategies/",
-    "brokers/",
-    "TRADING_BOT_README.md",
-    "main.js",
-    "index.html",
-    "styles.css",
-    "renderer.js",
-    "assets/"
+  "keywords": [
+    "trading",
+    "algorithmic",
+    "forex",
+    "bot",
+    "social-trading",
+    "react",
+    "nodejs"
   ],
-  "build": {
-    "appId": "com.tradingbot.app",
-    "productName": "Trading Bot Pro",
-    "directories": {
-      "output": "dist"
-    },
-    "files": [
-      "**/*",
-      "!node_modules/**/*",
-      "!dist/**/*",
-      "!.git/**/*",
-      "!*.log"
-    ],
-    "extraResources": [
-      {
-        "from": "assets/",
-        "to": "assets/"
-      }
-    ],
-    "win": {
-      "target": [
-        {
-          "target": "portable",
-          "arch": ["x64"]
-        }
-      ],
-      "requestedExecutionLevel": "asInvoker"
-    },
-    "portable": {
-      "artifactName": "TradingBotPro-Portable.exe"
-    },
-    "compression": "maximum",
-    "removePackageScripts": true,
-    "removePackageKeywords": true,
-    "forceCodeSigning": false
-  }
+  "author": "Trading Bot Platform Team",
+  "license": "MIT"
 }

@@ -1,369 +1,539 @@
-const { v4: uuidv4 } = require('uuid');
-const moment = require('moment');
+// Socket.io will be injected from server
+let io = null;
+
+const setIO = (socketIO) => {
+  io = socketIO;
+};
 
 class TradingService {
   constructor() {
+    this.isRunning = false;
+    this.currentStrategy = null;
+    this.trades = [];
     this.positions = [];
-    this.orders = [];
-    this.accountBalance = 10000; // Starting balance
-    this.equity = this.accountBalance;
-    this.margin = 0;
-    this.freeMargin = this.accountBalance;
-    this.marginLevel = 0;
+    this.balance = 10000; // Starting balance
+    this.performance = {
+      totalTrades: 0,
+      winningTrades: 0,
+      losingTrades: 0,
+      winRate: 0,
+      totalPnL: 0,
+      maxDrawdown: 0,
+      sharpeRatio: 0
+    };
+    this.strategies = {
+      'Moving Average Crossover': this.movingAverageCrossover.bind(this),
+      'RSI Strategy': this.rsiStrategy.bind(this),
+      'MACD Strategy': this.macdStrategy.bind(this),
+      'Bollinger Bands': this.bollingerBandsStrategy.bind(this),
+      'Random Walk': this.randomWalkStrategy.bind(this)
+    };
+    this.priceHistory = {};
+    this.indicators = {};
   }
 
-  async placeTrade(tradeData) {
-    const {
+  // Initialize the service
+  initialize() {
+    console.log('🚀 Trading Service initialized');
+    this.startPriceUpdates();
+  }
+
+  // Start trading with a specific strategy
+  startTrading(strategyName, parameters = {}) {
+    if (this.isRunning) {
+      this.stopTrading();
+    }
+
+    this.currentStrategy = strategyName;
+    this.isRunning = true;
+    
+    console.log(`📈 Starting ${strategyName} strategy`);
+    
+    // Emit status update
+    io.emit('tradingStatus', {
+      isRunning: true,
+      strategy: strategyName,
+      parameters
+    });
+
+    // Start strategy execution
+    this.executeStrategy(strategyName, parameters);
+  }
+
+  // Stop trading
+  stopTrading() {
+    this.isRunning = false;
+    this.currentStrategy = null;
+    
+    console.log('⏹️ Trading stopped');
+    
+    // Emit status update
+    io.emit('tradingStatus', {
+      isRunning: false,
+      strategy: null
+    });
+  }
+
+  // Execute the selected strategy
+  executeStrategy(strategyName, parameters) {
+    if (!this.isRunning) return;
+
+    const strategy = this.strategies[strategyName];
+    if (!strategy) {
+      console.error(`❌ Strategy ${strategyName} not found`);
+      return;
+    }
+
+    // Execute strategy and get signal
+    const signal = strategy(parameters);
+    
+    if (signal) {
+      this.executeTrade(signal);
+    }
+
+    // Schedule next execution
+    setTimeout(() => {
+      if (this.isRunning) {
+        this.executeStrategy(strategyName, parameters);
+      }
+    }, 5000); // Execute every 5 seconds
+  }
+
+  // Execute a trade based on signal
+  executeTrade(signal) {
+    const { action, symbol, price, volume = 0.1, reason } = signal;
+    
+    // Check if we have enough balance
+    const requiredMargin = price * volume * 100000 * 0.01; // 1% margin
+    if (this.balance < requiredMargin) {
+      console.log(`❌ Insufficient balance for trade: ${action} ${symbol}`);
+      return;
+    }
+
+    // Create trade
+    const trade = {
+      id: `trade_${Date.now()}`,
+      action,
       symbol,
-      type, // 'BUY' or 'SELL'
+      price,
       volume,
-      stopLoss,
-      takeProfit,
-      comment = ''
-    } = tradeData;
-
-    // Validate trade data
-    if (!symbol || !type || !volume) {
-      throw new Error('Missing required trade parameters');
-    }
-
-    if (volume <= 0 || volume > 100) {
-      throw new Error('Invalid volume size');
-    }
-
-    // Check if we have enough free margin
-    const requiredMargin = this.calculateRequiredMargin(symbol, volume);
-    if (requiredMargin > this.freeMargin) {
-      throw new Error('Insufficient free margin');
-    }
-
-    // Create position
-    const position = {
-      id: uuidv4(),
-      symbol,
-      type,
-      volume: parseFloat(volume),
-      openPrice: type === 'BUY' ? 1.0850 : 1.0848, // Simplified price
-      openTime: moment().toISOString(),
-      stopLoss: stopLoss ? parseFloat(stopLoss) : null,
-      takeProfit: takeProfit ? parseFloat(takeProfit) : null,
-      comment,
-      swap: 0,
-      profit: 0,
-      status: 'OPEN'
+      timestamp: new Date().toISOString(),
+      reason,
+      status: 'executed'
     };
 
-    // Calculate initial margin requirement
-    const margin = this.calculateRequiredMargin(symbol, volume);
-    
-    // Update account metrics
-    this.margin += margin;
-    this.freeMargin = this.accountBalance - this.margin;
-    this.marginLevel = this.equity / this.margin * 100;
+    // Add to trades history
+    this.trades.push(trade);
 
-    // Add position to list
-    this.positions.push(position);
+    // Update balance
+    this.balance -= requiredMargin;
 
-    // Create order record
-    const order = {
-      id: uuidv4(),
-      positionId: position.id,
-      symbol,
-      type,
-      volume: parseFloat(volume),
-      price: position.openPrice,
-      time: moment().toISOString(),
-      status: 'FILLED',
-      comment
-    };
+    // Create or update position
+    this.updatePosition(trade);
 
-    this.orders.push(order);
+    // Update performance metrics
+    this.updatePerformance();
 
-    console.log(`Trade placed: ${type} ${volume} ${symbol} at ${position.openPrice}`);
+    // Emit trade update
+    io.emit('tradeExecuted', {
+      trade,
+      balance: this.balance,
+      performance: this.performance
+    });
 
-    return {
-      success: true,
-      position,
-      order,
-      accountInfo: this.getAccountInfo()
-    };
+    console.log(`✅ Trade executed: ${action} ${symbol} at ${price}`);
   }
 
-  async closePosition(positionId) {
-    const positionIndex = this.positions.findIndex(p => p.id === positionId);
+  // Update position based on trade
+  updatePosition(trade) {
+    const existingPosition = this.positions.find(p => p.symbol === trade.symbol);
     
-    if (positionIndex === -1) {
-      throw new Error('Position not found');
-    }
-
-    const position = this.positions[positionIndex];
-    
-    // Calculate profit/loss (simplified)
-    const currentPrice = position.type === 'BUY' ? 1.0848 : 1.0850;
-    const priceDiff = position.type === 'BUY' ? 
-      currentPrice - position.openPrice : 
-      position.openPrice - currentPrice;
-    
-    const profit = priceDiff * position.volume * 100000; // Simplified P&L calculation
-
-    // Update position
-    position.closePrice = currentPrice;
-    position.closeTime = moment().toISOString();
-    position.profit = profit;
-    position.status = 'CLOSED';
-
-    // Update account
-    this.equity += profit;
-    this.accountBalance += profit;
-    
-    // Release margin
-    const margin = this.calculateRequiredMargin(position.symbol, position.volume);
-    this.margin -= margin;
-    this.freeMargin = this.accountBalance - this.margin;
-    this.marginLevel = this.equity / this.margin * 100;
-
-    // Create close order
-    const closeOrder = {
-      id: uuidv4(),
-      positionId: position.id,
-      symbol: position.symbol,
-      type: position.type === 'BUY' ? 'SELL' : 'BUY',
-      volume: position.volume,
-      price: currentPrice,
-      time: moment().toISOString(),
-      status: 'FILLED',
-      comment: 'Position close'
-    };
-
-    this.orders.push(closeOrder);
-
-    console.log(`Position closed: ${position.symbol} with P&L: ${profit}`);
-
-    return {
-      success: true,
-      position,
-      closeOrder,
-      profit,
-      accountInfo: this.getAccountInfo()
-    };
-  }
-
-  async modifyPosition(positionId, stopLoss, takeProfit) {
-    const position = this.positions.find(p => p.id === positionId);
-    
-    if (!position) {
-      throw new Error('Position not found');
-    }
-
-    if (position.status !== 'OPEN') {
-      throw new Error('Cannot modify closed position');
-    }
-
-    // Update stop loss and take profit
-    if (stopLoss !== undefined) {
-      position.stopLoss = parseFloat(stopLoss);
-    }
-    
-    if (takeProfit !== undefined) {
-      position.takeProfit = parseFloat(takeProfit);
-    }
-
-    return {
-      success: true,
-      position,
-      accountInfo: this.getAccountInfo()
-    };
-  }
-
-  getPositions() {
-    const openPositions = this.positions.filter(p => p.status === 'OPEN');
-    
-    // Add current price and P&L information
-    return openPositions.map(position => {
-      // Mock current prices for demo
-      const mockPrices = {
-        'EURUSD': { bid: 1.0850, ask: 1.0852 },
-        'GBPUSD': { bid: 1.2650, ask: 1.2652 },
-        'USDJPY': { bid: 148.50, ask: 148.52 },
-        'USDCHF': { bid: 0.8850, ask: 0.8852 },
-        'AUDUSD': { bid: 0.6550, ask: 0.6552 },
-        'USDCAD': { bid: 1.3650, ask: 1.3652 },
-        'NZDUSD': { bid: 0.6050, ask: 0.6052 }
-      };
-
-      const currentPrice = mockPrices[position.symbol] || { bid: position.openPrice, ask: position.openPrice };
-      const priceDiff = position.type === 'BUY' ? 
-        currentPrice.bid - position.openPrice : 
-        position.openPrice - currentPrice.ask;
+    if (existingPosition) {
+      // Close existing position
+      const pnl = (trade.price - existingPosition.openPrice) * 
+                  (existingPosition.type === 'BUY' ? 1 : -1) * 
+                  existingPosition.volume * 100000;
       
-      const pnl = priceDiff * position.volume * 100000;
-
-      return {
-        ...position,
-        currentPrice: position.type === 'BUY' ? currentPrice.bid : currentPrice.ask,
-        pnl: pnl
+      existingPosition.closePrice = trade.price;
+      existingPosition.closeTime = trade.timestamp;
+      existingPosition.pnl = pnl;
+      existingPosition.status = 'closed';
+      
+      // Update balance with P&L
+      this.balance += pnl;
+      
+      // Remove from open positions
+      this.positions = this.positions.filter(p => p.symbol !== trade.symbol);
+    } else {
+      // Open new position
+      const position = {
+        id: `pos_${Date.now()}`,
+        symbol: trade.symbol,
+        type: trade.action,
+        openPrice: trade.price,
+        volume: trade.volume,
+        openTime: trade.timestamp,
+        status: 'open',
+        pnl: 0
       };
+      
+      this.positions.push(position);
+    }
+  }
+
+  // Update performance metrics
+  updatePerformance() {
+    const closedTrades = this.trades.filter(t => t.status === 'executed');
+    const winningTrades = closedTrades.filter(t => {
+      const position = this.positions.find(p => p.symbol === t.symbol && p.status === 'closed');
+      return position && position.pnl > 0;
     });
-  }
 
-  getAllPositions() {
-    return this.positions;
-  }
-
-  getOrders() {
-    return this.orders;
-  }
-
-  getAccountInfo() {
-    return {
-      balance: this.accountBalance,
-      equity: this.equity,
-      margin: this.margin,
-      freeMargin: this.freeMargin,
-      marginLevel: this.marginLevel,
-      openPositions: this.positions.filter(p => p.status === 'OPEN').length
+    this.performance = {
+      totalTrades: closedTrades.length,
+      winningTrades: winningTrades.length,
+      losingTrades: closedTrades.length - winningTrades.length,
+      winRate: closedTrades.length > 0 ? (winningTrades.length / closedTrades.length) * 100 : 0,
+      totalPnL: this.positions.reduce((sum, p) => sum + (p.pnl || 0), 0),
+      maxDrawdown: this.calculateMaxDrawdown(),
+      sharpeRatio: this.calculateSharpeRatio()
     };
   }
 
-  calculateRequiredMargin(symbol, volume) {
-    // Simplified margin calculation
-    // In real trading, this would depend on leverage, symbol, and broker requirements
-    const leverage = 100; // 1:100 leverage
-    const contractSize = 100000; // Standard lot size
-    const price = 1.0850; // Simplified price
+  // Calculate maximum drawdown
+  calculateMaxDrawdown() {
+    let maxDrawdown = 0;
+    let peak = 10000; // Starting balance
     
-    return (volume * contractSize * price) / leverage;
-  }
-
-  updatePositions(marketData) {
-    // Update P&L for open positions based on current market prices
-    this.positions.forEach(position => {
-      if (position.status === 'OPEN') {
-        const currentPrice = marketData[position.symbol];
-        if (currentPrice) {
-          const price = position.type === 'BUY' ? currentPrice.bid : currentPrice.ask;
-          const priceDiff = position.type === 'BUY' ? 
-            price - position.openPrice : 
-            position.openPrice - price;
-          
-          position.profit = priceDiff * position.volume * 100000;
+    this.trades.forEach(trade => {
+      const position = this.positions.find(p => p.symbol === trade.symbol);
+      if (position && position.status === 'closed') {
+        const currentBalance = this.balance + position.pnl;
+        if (currentBalance > peak) {
+          peak = currentBalance;
+        }
+        const drawdown = (peak - currentBalance) / peak * 100;
+        if (drawdown > maxDrawdown) {
+          maxDrawdown = drawdown;
         }
       }
     });
-
-    // Update equity
-    this.equity = this.accountBalance + 
-      this.positions
-        .filter(p => p.status === 'OPEN')
-        .reduce((sum, p) => sum + p.profit, 0);
-
-    this.freeMargin = this.accountBalance - this.margin;
-    this.marginLevel = this.margin > 0 ? (this.equity / this.margin * 100) : 0;
-  }
-
-  checkStopLossAndTakeProfit(marketData) {
-    this.positions.forEach(position => {
-      if (position.status === 'OPEN') {
-        const currentPrice = marketData[position.symbol];
-        if (currentPrice) {
-          const price = position.type === 'BUY' ? currentPrice.bid : currentPrice.ask;
-          
-          // Check stop loss
-          if (position.stopLoss && 
-              ((position.type === 'BUY' && price <= position.stopLoss) ||
-               (position.type === 'SELL' && price >= position.stopLoss))) {
-            this.closePosition(position.id);
-          }
-          
-          // Check take profit
-          if (position.takeProfit && 
-              ((position.type === 'BUY' && price >= position.takeProfit) ||
-               (position.type === 'SELL' && price <= position.takeProfit))) {
-            this.closePosition(position.id);
-          }
-        }
-      }
-    });
-  }
-
-  getTradeHistory(filter = {}) {
-    // For demo purposes, return some mock trade history
-    const mockHistory = [
-      {
-        id: '1',
-        symbol: 'EURUSD',
-        type: 'BUY',
-        volume: 0.1,
-        openPrice: 1.0850,
-        closePrice: 1.0875,
-        pnl: 25.00,
-        openTime: Date.now() - 3600000, // 1 hour ago
-        closeTime: Date.now() - 1800000  // 30 minutes ago
-      },
-      {
-        id: '2',
-        symbol: 'GBPUSD',
-        type: 'SELL',
-        volume: 0.05,
-        openPrice: 1.2650,
-        closePrice: 1.2630,
-        pnl: 10.00,
-        openTime: Date.now() - 7200000, // 2 hours ago
-        closeTime: Date.now() - 5400000  // 1.5 hours ago
-      },
-      {
-        id: '3',
-        symbol: 'USDJPY',
-        type: 'BUY',
-        volume: 0.1,
-        openPrice: 148.50,
-        closePrice: 148.75,
-        pnl: 25.00,
-        openTime: Date.now() - 10800000, // 3 hours ago
-        closeTime: Date.now() - 9000000   // 2.5 hours ago
-      },
-      {
-        id: '4',
-        symbol: 'AUDUSD',
-        type: 'SELL',
-        volume: 0.2,
-        openPrice: 0.6550,
-        closePrice: 0.6530,
-        pnl: 40.00,
-        openTime: Date.now() - 14400000, // 4 hours ago
-        closeTime: Date.now() - 12600000  // 3.5 hours ago
-      },
-      {
-        id: '5',
-        symbol: 'USDCAD',
-        type: 'BUY',
-        volume: 0.15,
-        openPrice: 1.3650,
-        closePrice: 1.3675,
-        pnl: 37.50,
-        openTime: Date.now() - 18000000, // 5 hours ago
-        closeTime: Date.now() - 16200000  // 4.5 hours ago
-      }
-    ];
-
-    // Apply filters
-    let filteredHistory = mockHistory;
     
-    if (filter.symbol && filter.symbol !== 'ALL') {
-      filteredHistory = filteredHistory.filter(trade => trade.symbol === filter.symbol);
+    return maxDrawdown;
+  }
+
+  // Calculate Sharpe ratio
+  calculateSharpeRatio() {
+    if (this.trades.length < 2) return 0;
+    
+    const returns = this.trades.map(trade => {
+      const position = this.positions.find(p => p.symbol === trade.symbol);
+      return position && position.status === 'closed' ? position.pnl : 0;
+    }).filter(r => r !== 0);
+    
+    if (returns.length === 0) return 0;
+    
+    const avgReturn = returns.reduce((sum, r) => sum + r, 0) / returns.length;
+    const variance = returns.reduce((sum, r) => sum + Math.pow(r - avgReturn, 2), 0) / returns.length;
+    const stdDev = Math.sqrt(variance);
+    
+    return stdDev > 0 ? avgReturn / stdDev : 0;
+  }
+
+  // Strategy implementations
+  movingAverageCrossover(parameters) {
+    const { symbol = 'EURUSD', shortPeriod = 10, longPeriod = 20 } = parameters;
+    const prices = this.getPriceHistory(symbol);
+    
+    if (prices.length < longPeriod) return null;
+    
+    const shortMA = this.calculateSMA(prices, shortPeriod);
+    const longMA = this.calculateSMA(prices, longPeriod);
+    
+    const currentPrice = prices[prices.length - 1];
+    const previousShortMA = this.calculateSMA(prices.slice(0, -1), shortPeriod);
+    const previousLongMA = this.calculateSMA(prices.slice(0, -1), longPeriod);
+    
+    // Buy signal: short MA crosses above long MA
+    if (shortMA > longMA && previousShortMA <= previousLongMA) {
+      return {
+        action: 'BUY',
+        symbol,
+        price: currentPrice,
+        reason: `MA Crossover: ${shortPeriod}MA > ${longPeriod}MA`
+      };
     }
     
-    if (filter.type && filter.type !== 'ALL') {
-      filteredHistory = filteredHistory.filter(trade => trade.type === filter.type);
+    // Sell signal: short MA crosses below long MA
+    if (shortMA < longMA && previousShortMA >= previousLongMA) {
+      return {
+        action: 'SELL',
+        symbol,
+        price: currentPrice,
+        reason: `MA Crossover: ${shortPeriod}MA < ${longPeriod}MA`
+      };
     }
-
-    return filteredHistory;
+    
+    return null;
   }
 
-  getRecentTrades(limit = 5) {
-    const history = this.getTradeHistory();
-    return history.slice(0, limit);
+  rsiStrategy(parameters) {
+    const { symbol = 'EURUSD', period = 14, overbought = 70, oversold = 30 } = parameters;
+    const prices = this.getPriceHistory(symbol);
+    
+    if (prices.length < period) return null;
+    
+    const rsi = this.calculateRSI(prices, period);
+    const currentPrice = prices[prices.length - 1];
+    
+    // Buy signal: RSI below oversold level
+    if (rsi < oversold) {
+      return {
+        action: 'BUY',
+        symbol,
+        price: currentPrice,
+        reason: `RSI oversold: ${rsi.toFixed(2)}`
+      };
+    }
+    
+    // Sell signal: RSI above overbought level
+    if (rsi > overbought) {
+      return {
+        action: 'SELL',
+        symbol,
+        price: currentPrice,
+        reason: `RSI overbought: ${rsi.toFixed(2)}`
+      };
+    }
+    
+    return null;
+  }
+
+  macdStrategy(parameters) {
+    const { symbol = 'EURUSD', fastPeriod = 12, slowPeriod = 26, signalPeriod = 9 } = parameters;
+    const prices = this.getPriceHistory(symbol);
+    
+    if (prices.length < slowPeriod) return null;
+    
+    const { macd, signal } = this.calculateMACD(prices, fastPeriod, slowPeriod, signalPeriod);
+    const currentPrice = prices[prices.length - 1];
+    
+    // Buy signal: MACD crosses above signal line
+    if (macd > signal && this.getPreviousMACD(prices, fastPeriod, slowPeriod, signalPeriod).macd <= this.getPreviousMACD(prices, fastPeriod, slowPeriod, signalPeriod).signal) {
+      return {
+        action: 'BUY',
+        symbol,
+        price: currentPrice,
+        reason: `MACD bullish crossover: ${macd.toFixed(4)} > ${signal.toFixed(4)}`
+      };
+    }
+    
+    // Sell signal: MACD crosses below signal line
+    if (macd < signal && this.getPreviousMACD(prices, fastPeriod, slowPeriod, signalPeriod).macd >= this.getPreviousMACD(prices, fastPeriod, slowPeriod, signalPeriod).signal) {
+      return {
+        action: 'SELL',
+        symbol,
+        price: currentPrice,
+        reason: `MACD bearish crossover: ${macd.toFixed(4)} < ${signal.toFixed(4)}`
+      };
+    }
+    
+    return null;
+  }
+
+  bollingerBandsStrategy(parameters) {
+    const { symbol = 'EURUSD', period = 20, stdDev = 2 } = parameters;
+    const prices = this.getPriceHistory(symbol);
+    
+    if (prices.length < period) return null;
+    
+    const { upper, lower } = this.calculateBollingerBands(prices, period, stdDev);
+    const currentPrice = prices[prices.length - 1];
+    
+    // Buy signal: price touches lower band
+    if (currentPrice <= lower) {
+      return {
+        action: 'BUY',
+        symbol,
+        price: currentPrice,
+        reason: `Bollinger Bands: Price at lower band ${lower.toFixed(4)}`
+      };
+    }
+    
+    // Sell signal: price touches upper band
+    if (currentPrice >= upper) {
+      return {
+        action: 'SELL',
+        symbol,
+        price: currentPrice,
+        reason: `Bollinger Bands: Price at upper band ${upper.toFixed(4)}`
+      };
+    }
+    
+    return null;
+  }
+
+  randomWalkStrategy(parameters) {
+    const { symbol = 'EURUSD' } = parameters;
+    const currentPrice = this.getCurrentPrice(symbol);
+    
+    if (!currentPrice) return null;
+    
+    // Random trading decision (for demonstration)
+    const random = Math.random();
+    
+    if (random < 0.1) { // 10% chance to buy
+      return {
+        action: 'BUY',
+        symbol,
+        price: currentPrice,
+        reason: 'Random Walk: Buy signal'
+      };
+    } else if (random > 0.9) { // 10% chance to sell
+      return {
+        action: 'SELL',
+        symbol,
+        price: currentPrice,
+        reason: 'Random Walk: Sell signal'
+      };
+    }
+    
+    return null;
+  }
+
+  // Technical indicator calculations
+  calculateSMA(prices, period) {
+    const slice = prices.slice(-period);
+    return slice.reduce((sum, price) => sum + price, 0) / slice.length;
+  }
+
+  calculateRSI(prices, period) {
+    if (prices.length < period + 1) return 50;
+    
+    let gains = 0;
+    let losses = 0;
+    
+    for (let i = prices.length - period; i < prices.length; i++) {
+      const change = prices[i] - prices[i - 1];
+      if (change > 0) {
+        gains += change;
+      } else {
+        losses -= change;
+      }
+    }
+    
+    const avgGain = gains / period;
+    const avgLoss = losses / period;
+    
+    if (avgLoss === 0) return 100;
+    
+    const rs = avgGain / avgLoss;
+    return 100 - (100 / (1 + rs));
+  }
+
+  calculateMACD(prices, fastPeriod, slowPeriod, signalPeriod) {
+    const fastEMA = this.calculateEMA(prices, fastPeriod);
+    const slowEMA = this.calculateEMA(prices, slowPeriod);
+    const macd = fastEMA - slowEMA;
+    
+    // Calculate signal line (EMA of MACD)
+    const macdValues = [];
+    for (let i = slowPeriod; i < prices.length; i++) {
+      const fastEMA = this.calculateEMA(prices.slice(0, i + 1), fastPeriod);
+      const slowEMA = this.calculateEMA(prices.slice(0, i + 1), slowPeriod);
+      macdValues.push(fastEMA - slowEMA);
+    }
+    
+    const signal = this.calculateEMA(macdValues, signalPeriod);
+    
+    return { macd, signal };
+  }
+
+  calculateEMA(prices, period) {
+    const multiplier = 2 / (period + 1);
+    let ema = prices[0];
+    
+    for (let i = 1; i < prices.length; i++) {
+      ema = (prices[i] * multiplier) + (ema * (1 - multiplier));
+    }
+    
+    return ema;
+  }
+
+  calculateBollingerBands(prices, period, stdDev) {
+    const sma = this.calculateSMA(prices, period);
+    const slice = prices.slice(-period);
+    
+    const variance = slice.reduce((sum, price) => sum + Math.pow(price - sma, 2), 0) / period;
+    const standardDeviation = Math.sqrt(variance);
+    
+    return {
+      upper: sma + (standardDeviation * stdDev),
+      lower: sma - (standardDeviation * stdDev)
+    };
+  }
+
+  // Helper methods
+  getPriceHistory(symbol) {
+    return this.priceHistory[symbol] || [];
+  }
+
+  getCurrentPrice(symbol) {
+    const history = this.getPriceHistory(symbol);
+    return history.length > 0 ? history[history.length - 1] : null;
+  }
+
+  getPreviousMACD(prices, fastPeriod, slowPeriod, signalPeriod) {
+    if (prices.length < slowPeriod + 1) return { macd: 0, signal: 0 };
+    return this.calculateMACD(prices.slice(0, -1), fastPeriod, slowPeriod, signalPeriod);
+  }
+
+  // Update price history
+  updatePriceHistory(symbol, price) {
+    if (!this.priceHistory[symbol]) {
+      this.priceHistory[symbol] = [];
+    }
+    
+    this.priceHistory[symbol].push(price);
+    
+    // Keep only last 100 prices
+    if (this.priceHistory[symbol].length > 100) {
+      this.priceHistory[symbol] = this.priceHistory[symbol].slice(-100);
+    }
+  }
+
+  // Start price updates
+  startPriceUpdates() {
+    setInterval(() => {
+      const symbols = ['EURUSD', 'GBPUSD', 'USDJPY', 'USDCHF', 'AUDUSD', 'USDCAD'];
+      
+      symbols.forEach(symbol => {
+        // Simulate price movement
+        const currentPrice = this.getCurrentPrice(symbol) || 1.0850;
+        const change = (Math.random() - 0.5) * 0.001; // ±0.05% change
+        const newPrice = currentPrice + change;
+        
+        this.updatePriceHistory(symbol, newPrice);
+      });
+    }, 1000); // Update every second
+  }
+
+  // Get current state
+  getState() {
+    return {
+      isRunning: this.isRunning,
+      currentStrategy: this.currentStrategy,
+      balance: this.balance,
+      positions: this.positions.filter(p => p.status === 'open'),
+      trades: this.trades.slice(-50), // Last 50 trades
+      performance: this.performance
+    };
+  }
+
+  // Get available strategies
+  getStrategies() {
+    return Object.keys(this.strategies);
   }
 }
 
-module.exports = TradingService;
+module.exports = { TradingService, setIO };

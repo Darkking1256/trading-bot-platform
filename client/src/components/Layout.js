@@ -29,7 +29,7 @@ const Layout = ({ children }) => {
     { name: 'Social Trading', href: '/social-trading', icon: Users },
     { name: 'Risk Management', href: '/risk-management', icon: Shield },
     { name: 'Advanced Analytics', href: '/advanced-analytics', icon: Brain },
-    { name: 'Algorithmic Trading', href: '/algorithmic-trading', icon: Bot },
+    { name: 'Trading Bot', href: '/trading-bot', icon: Bot },
     { name: 'Market Data', href: '/market-data', icon: BarChart },
     { name: 'Broker Connection', href: '/broker-connection', icon: Building2 },
     { name: 'Positions', href: '/positions', icon: Activity },

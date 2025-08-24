@@ -13,6 +13,7 @@ const { initializeDatabase } = require('./models/index');
 const UserService = require('./services/UserService');
 const TradeService = require('./services/TradeService');
 const MarketDataService = require('./services/MarketDataService');
+const { TradingService, setIO } = require('./services/TradingService');
 const marketDataRoutes = require('./routes/marketData');
 const brokerRoutes = require('./routes/broker');
 
@@ -37,6 +38,9 @@ const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-change-in-producti
 
 // Initialize market data service
 const marketDataService = new MarketDataService();
+
+// Initialize trading service
+const tradingService = new TradingService();
 
 // Market data (will be replaced with real data from service)
 let marketData = {};
@@ -155,6 +159,44 @@ app.use('/api/market', marketDataRoutes);
 // Broker routes
 app.use('/api/broker', brokerRoutes);
 
+// Trading routes
+app.post('/api/trading/start', (req, res) => {
+  try {
+    const { strategy, parameters } = req.body;
+    tradingService.startTrading(strategy, parameters);
+    res.json({ success: true, message: `Started ${strategy} strategy` });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.post('/api/trading/stop', (req, res) => {
+  try {
+    tradingService.stopTrading();
+    res.json({ success: true, message: 'Trading stopped' });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.get('/api/trading/status', (req, res) => {
+  try {
+    const state = tradingService.getState();
+    res.json(state);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.get('/api/trading/strategies', (req, res) => {
+  try {
+    const strategies = tradingService.getStrategies();
+    res.json({ strategies });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // Socket.IO connection handling
 io.on('connection', (socket) => {
   console.log('Client connected:', socket.id);
@@ -247,6 +289,35 @@ io.on('connection', (socket) => {
   socket.on('unsubscribe', (symbol) => {
     socket.leave(symbol);
     console.log(`Client ${socket.id} unsubscribed from ${symbol}`);
+  });
+
+  // Trading strategy control
+  socket.on('startTrading', (data) => {
+    try {
+      const { strategy, parameters } = data;
+      tradingService.startTrading(strategy, parameters);
+      socket.emit('tradingStarted', { strategy, parameters });
+    } catch (error) {
+      socket.emit('tradingError', { error: error.message });
+    }
+  });
+
+  socket.on('stopTrading', () => {
+    try {
+      tradingService.stopTrading();
+      socket.emit('tradingStopped');
+    } catch (error) {
+      socket.emit('tradingError', { error: error.message });
+    }
+  });
+
+  socket.on('getTradingStatus', () => {
+    try {
+      const state = tradingService.getState();
+      socket.emit('tradingStatus', state);
+    } catch (error) {
+      socket.emit('tradingError', { error: error.message });
+    }
   });
 
   // Handle order placement
@@ -1902,6 +1973,15 @@ const startServer = async () => {
           timestamp: Date.now()
         };
       });
+    }
+
+    // Initialize trading service
+    try {
+      setIO(io); // Inject socket.io instance
+      tradingService.initialize();
+      console.log(`🤖 Trading service initialized successfully`);
+    } catch (tradingError) {
+      console.log(`⚠️  Trading service failed: ${tradingError.message}`);
     }
     
     // Start server

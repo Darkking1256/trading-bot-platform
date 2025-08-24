@@ -5,8 +5,11 @@ const MarketDataService = require('../services/MarketDataService');
 // Initialize market data service
 const marketDataService = new MarketDataService();
 
-// Initialize service on startup
-marketDataService.initialize().catch(console.error);
+// Initialize service on startup (don't fail if it doesn't work)
+marketDataService.initialize().catch(error => {
+  console.log(`⚠️  Market data service initialization failed: ${error.message}`);
+  console.log(`📊 Using simulated data for demonstration`);
+});
 
 // Get all current prices
 router.get('/prices', async (req, res) => {

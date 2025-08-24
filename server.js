@@ -39,6 +39,7 @@ const marketDataService = new MarketDataService();
 // Market data (will be replaced with real data from service)
 let marketData = {};
 let symbols = [];
+let positions = []; // Initialize positions array to prevent errors
 
 // Authentication middleware
 const authenticateToken = (req, res, next) => {
@@ -1835,17 +1836,19 @@ setInterval(async () => {
           data: marketData[symbol]
         });
 
-        // Update positions P&L
-        positions.forEach(position => {
-          if (position.symbol === symbol && position.status === 'open') {
-            const priceDiff = priceData.bid - position.openPrice;
-            const multiplier = position.type === 'BUY' ? 1 : -1;
-            position.pnl = priceDiff * multiplier * position.volume * 100000; // 100k units per lot
-          }
-        });
+        // Update positions P&L (only if positions array exists)
+        if (typeof positions !== 'undefined' && Array.isArray(positions)) {
+          positions.forEach(position => {
+            if (position.symbol === symbol && position.status === 'open') {
+              const priceDiff = priceData.bid - position.openPrice;
+              const multiplier = position.type === 'BUY' ? 1 : -1;
+              position.pnl = priceDiff * multiplier * position.volume * 100000; // 100k units per lot
+            }
+          });
 
-        // Emit position updates
-        io.emit('positionUpdate', positions.filter(p => p.status === 'open'));
+          // Emit position updates
+          io.emit('positionUpdate', positions.filter(p => p.status === 'open'));
+        }
       }
     });
   } catch (error) {
@@ -1863,27 +1866,44 @@ const PORT = process.env.PORT || 5000;
 // Initialize database and start server
 const startServer = async () => {
   try {
-    // Test database connection
-    await testConnection();
-    
-    // Initialize database (create tables, default data)
-    await initializeDatabase();
+    // Try to connect to database, but don't fail if it's not available
+    try {
+      await testConnection();
+      await initializeDatabase();
+      console.log(`💾 Database connected successfully`);
+    } catch (dbError) {
+      console.log(`⚠️  Database not available, running in demo mode: ${dbError.message}`);
+      console.log(`📊 Using simulated data for demonstration`);
+    }
     
     // Initialize market data service
-    await marketDataService.initialize();
-    
-    // Update symbols and market data from service
-    symbols = marketDataService.getAvailableSymbols();
-    marketData = marketDataService.getAllCurrentPrices();
-    
-    console.log(`📊 Market data service initialized with ${symbols.length} symbols`);
+    try {
+      await marketDataService.initialize();
+      
+      // Update symbols and market data from service
+      symbols = marketDataService.getAvailableSymbols();
+      marketData = marketDataService.getAllCurrentPrices();
+      
+      console.log(`📊 Market data service initialized with ${symbols.length} symbols`);
+    } catch (marketDataError) {
+      console.log(`⚠️  Market data service failed, using simulated data: ${marketDataError.message}`);
+      
+      // Fallback to simulated data
+      symbols = ['EURUSD', 'GBPUSD', 'USDJPY', 'USDCHF', 'AUDUSD', 'USDCAD'];
+      symbols.forEach(symbol => {
+        marketData[symbol] = {
+          bid: 1.0850 + Math.random() * 0.1,
+          ask: 1.0850 + Math.random() * 0.1,
+          timestamp: Date.now()
+        };
+      });
+    }
     
     // Start server
     server.listen(PORT, () => {
       console.log(`🚀 Server running on port ${PORT}`);
       console.log(`📱 React app will be served from http://localhost:${PORT}`);
       console.log(`🔌 API endpoints available at http://localhost:${PORT}/api`);
-      console.log(`💾 Database connected successfully`);
       console.log(`📈 Market data service ready`);
     });
   } catch (error) {

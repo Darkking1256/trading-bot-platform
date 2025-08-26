@@ -12,7 +12,7 @@
     "build-client": "cd client && npm run build",
     "heroku-postbuild": "npm run install-client && npm run build-client",
     "railway-postbuild": "npm run build",
-    "postinstall": "npm run build",
+    "postinstall": "npm run install-client && npm run build-client",
     "setup-db": "node scripts/setup-database.js",
     "db:reset": "node scripts/setup-database.js --reset"
   },

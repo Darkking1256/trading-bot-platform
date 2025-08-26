@@ -1,0 +1,26 @@
+# Railway ignore file - force Nixpacks usage
+Dockerfile*
+docker-compose.yml
+.dockerignore
+
+# Ignore backup files
+railway.json.simple
+package.json.railway
+server.railway*.js
+Dockerfile.backup
+
+# Ignore build artifacts
+client/build
+node_modules
+client/node_modules
+
+# Ignore logs
+*.log
+npm-debug.log*
+
+# Ignore environment files
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local

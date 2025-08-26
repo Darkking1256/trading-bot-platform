@@ -12,5 +12,10 @@
   },
   "variables": {
     "NODE_ENV": "production"
-  }
+  },
+  "ignore": [
+    "Dockerfile*",
+    "docker-compose.yml",
+    ".dockerignore"
+  ]
 }

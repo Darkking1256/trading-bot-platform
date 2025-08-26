@@ -354,3 +354,4 @@ self.addEventListener('periodicsync', (event) => {
 console.log('Service Worker loaded');
 
 
+

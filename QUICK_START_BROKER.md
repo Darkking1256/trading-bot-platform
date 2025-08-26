@@ -129,3 +129,4 @@ npm start
 *Remember: Trading involves risk. Start with demo accounts and trade responsibly.*
 
 
+

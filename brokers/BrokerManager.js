@@ -667,3 +667,4 @@ class DemoBroker {
 module.exports = { BrokerManager, OANDABroker, FXCMBroker, InteractiveBrokersBroker, DemoBroker };
 
 
+

@@ -308,3 +308,4 @@ Your Trading Bot Pro is now equipped with professional-grade broker connections 
 *This documentation is for educational purposes. Trading involves risk and may not be suitable for all investors.*
 
 
+

@@ -275,3 +275,4 @@ SMTP_PASS=your-password
 Your Trading Bot Pro is now ready to generate revenue while providing value to users at every subscription tier! 🚀💰
 
 
+

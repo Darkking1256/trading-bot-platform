@@ -189,3 +189,4 @@ If you encounter any issues:
 **🎉 Congratulations!** You now have a professional, standalone trading bot application that anyone can use without any technical knowledge!
 
 
+

@@ -1,0 +1,8 @@
+{
+  "short_name": "Trading Platform",
+  "name": "Professional Trading Platform",
+  "start_url": ".",
+  "display": "standalone",
+  "theme_color": "#000000",
+  "background_color": "#0f0f23"
+}

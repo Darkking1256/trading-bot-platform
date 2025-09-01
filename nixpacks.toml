@@ -1,12 +1,18 @@
 [phases.install]
 cmds = [
-  "npm install",
-  "cd client && npm install"
+  "npm install --ignore-scripts",
+  "cd client && npm install --ignore-scripts"
 ]
 
 [phases.build]
 cmds = [
-  "cd client && npm run build"
+  "echo 'Current directory:' && pwd",
+  "echo 'Listing all files:' && ls -la",
+  "echo 'Client directory:' && ls -la client/",
+  "echo 'Client public directory:' && ls -la client/public/",
+  "echo 'Checking if index.html exists:' && test -f client/public/index.html && echo 'index.html found' || echo 'index.html NOT found'",
+  "npm run install-client",
+  "npm run build-client"
 ]
 
 [start]

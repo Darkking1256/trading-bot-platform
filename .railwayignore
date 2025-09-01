@@ -1,7 +1,7 @@
-# Railway ignore file - force Nixpacks usage
-Dockerfile*
-docker-compose.yml
-.dockerignore
+# Railway ignore file - allow Dockerfiles for now
+# Dockerfile*
+# docker-compose.yml
+# .dockerignore
 
 # Ignore backup files
 railway.json.simple

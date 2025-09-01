@@ -1,0 +1,39 @@
+# Allow main Dockerfile for Railway builds
+# Dockerfile*
+docker-compose.yml
+.dockerignore
+
+# Ignore build artifacts
+client/build
+node_modules
+client/node_modules
+
+# Ignore logs
+*.log
+npm-debug.log*
+
+# Ignore environment files
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Ignore OS files
+.DS_Store
+Thumbs.db
+
+# Ignore IDE files
+.vscode
+.idea
+*.swp
+*.swo
+
+# Ignore git
+.git
+.gitignore
+
+# Ignore Railway backup files
+railway.json.simple
+package.json.railway
+server.railway*.js

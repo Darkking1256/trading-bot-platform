@@ -18,11 +18,22 @@ RUN cd client && npm install --ignore-scripts
 # Copy ALL source code (including client/public/index.html)
 COPY . .
 
-# Verify that index.html exists before building
-RUN ls -la client/public/ && test -f client/public/index.html
+# Debug: Show what files we have
+RUN echo "=== Current directory structure ===" && \
+    pwd && \
+    ls -la && \
+    echo "=== Client directory ===" && \
+    ls -la client/ && \
+    echo "=== Client public directory ===" && \
+    ls -la client/public/ && \
+    echo "=== Checking for index.html ===" && \
+    test -f client/public/index.html && echo "index.html found" || echo "index.html NOT found"
 
-# Now run the postinstall scripts manually after all files are copied
-RUN npm run install-client && npm run build-client
+# Verify that index.html exists before building
+RUN test -f client/public/index.html || (echo "index.html missing!" && exit 1)
+
+# Now run the build process manually
+RUN cd client && npm run build
 
 # Expose port
 EXPOSE 5000

@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import { socket, socketStatus, tradingEvents } from '../lib/socket';
 import { useDemoTicker } from '../hooks/useDemoTicker';
+import { apiRequest } from '../lib/api';
 
 const TradingBot = () => {
   const [isConnected, setIsConnected] = useState(false);
@@ -135,8 +136,7 @@ const TradingBot = () => {
 
   const fetchStrategies = async () => {
     try {
-      const response = await fetch('http://localhost:5000/api/trading/strategies');
-      const data = await response.json();
+      const data = await apiRequest('/api/trading/strategies');
       setAvailableStrategies(data.strategies || []);
     } catch (error) {
       console.error('Failed to fetch strategies:', error);

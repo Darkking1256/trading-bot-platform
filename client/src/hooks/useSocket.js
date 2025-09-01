@@ -7,10 +7,19 @@ export const useSocket = () => {
   const socketRef = useRef();
 
   useEffect(() => {
+    // Determine the server URL based on environment
+    const isDevelopment = process.env.NODE_ENV === 'development';
+    const serverUrl = isDevelopment 
+      ? 'http://localhost:5000' 
+      : window.location.origin; // Use current domain in production
+
+    console.log('Connecting to server:', serverUrl);
+
     // Create socket connection
-    const socket = io('http://localhost:5000', {
+    const socket = io(serverUrl, {
       transports: ['websocket', 'polling'],
       autoConnect: true,
+      timeout: 20000, // 20 second timeout
     });
 
     socketRef.current = socket;
@@ -46,6 +55,8 @@ export const useSocket = () => {
     error,
   };
 };
+
+
 
 
 

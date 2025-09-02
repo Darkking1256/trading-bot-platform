@@ -33,3 +33,5 @@ AppRegistry.registerComponent(appName, () => TradingBotProMobile);
 
 
 
+
+

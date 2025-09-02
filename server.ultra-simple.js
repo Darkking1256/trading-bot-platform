@@ -3,6 +3,7 @@ const http = require('http');
 const path = require('path');
 
 console.log('🚀 Starting ultra-simple Railway server...');
+console.log('🔧 FORCED PRODUCTION MODE - React app will always be served');
 
 const app = express();
 const server = http.createServer(app);

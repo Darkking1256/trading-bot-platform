@@ -32,8 +32,15 @@ RUN echo "=== Current directory structure ===" && \
 # Verify that index.html exists before building
 RUN test -f client/public/index.html || (echo "index.html missing!" && exit 1)
 
-# Now run the build process manually
-RUN cd client && npm run build
+# Now run the build process manually with verbose output
+RUN cd client && echo "Starting React build..." && \
+    npm run build && \
+    echo "React build completed" && \
+    ls -la build/ && \
+    test -f build/index.html && echo "build/index.html found" || echo "build/index.html missing!"
+
+# Verify the build output
+RUN test -f client/build/index.html || (echo "React build failed - index.html missing!" && exit 1)
 
 # Expose port
 EXPOSE 5000

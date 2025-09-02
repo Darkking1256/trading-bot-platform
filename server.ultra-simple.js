@@ -8,20 +8,20 @@ const app = express();
 const server = http.createServer(app);
 
 const PORT = process.env.PORT || 5000;
-const isProduction = process.env.NODE_ENV === 'production';
+// Force production mode for Railway deployment
+const isProduction = true; // process.env.NODE_ENV === 'production' || true;
 
 console.log(`📊 Environment: ${process.env.NODE_ENV || 'development'}`);
 console.log(`🔌 Port: ${PORT}`);
 console.log(`🏭 Production mode: ${isProduction}`);
+console.log(`🚀 FORCED PRODUCTION MODE for Railway deployment`);
 
 // Basic middleware
 app.use(express.json());
 
-// Serve static files from the React app (only in production)
-if (isProduction) {
-  console.log('📁 Serving static files from client/build');
-  app.use(express.static(path.join(__dirname, 'client/build')));
-}
+// Serve static files from the React app (always in production for Railway)
+console.log('📁 Serving static files from client/build');
+app.use(express.static(path.join(__dirname, 'client/build')));
 
 // Health check endpoint
 app.get('/api/health', (req, res) => {
@@ -39,21 +39,9 @@ app.get('/api/health', (req, res) => {
 
 // Root endpoint
 app.get('/', (req, res) => {
-  console.log('🏠 Root endpoint requested');
-  if (isProduction) {
-    // Serve the React app
-    res.sendFile(path.join(__dirname, 'client/build', 'index.html'));
-  } else {
-    res.json({
-      message: 'Trading Bot Platform API - Ultra Simple Server',
-      status: 'running',
-      endpoints: {
-        health: '/api/health',
-        test: '/api/test'
-      },
-      timestamp: new Date().toISOString()
-    });
-  }
+  console.log('🏠 Root endpoint requested - serving React app');
+  // Always serve the React app
+  res.sendFile(path.join(__dirname, 'client/build', 'index.html'));
 });
 
 // Test endpoint
@@ -77,13 +65,11 @@ app.get('/api/keepalive', (req, res) => {
   });
 });
 
-// Catch all handler for React Router (only in production)
-if (isProduction) {
-  app.get('*', (req, res) => {
-    console.log(`🔄 Serving React app for route: ${req.path}`);
-    res.sendFile(path.join(__dirname, 'client/build', 'index.html'));
-  });
-}
+// Catch all handler for React Router (always serve React app)
+app.get('*', (req, res) => {
+  console.log(`🔄 Serving React app for route: ${req.path}`);
+  res.sendFile(path.join(__dirname, 'client/build', 'index.html'));
+});
 
 // Start server
 server.listen(PORT, () => {
@@ -93,9 +79,7 @@ server.listen(PORT, () => {
   console.log(`🧪 Test endpoint: http://localhost:${PORT}/api/test`);
   console.log(`🏠 Root endpoint: http://localhost:${PORT}/`);
   console.log(`💓 Keep-alive: http://localhost:${PORT}/api/keepalive`);
-  if (isProduction) {
-    console.log(`📱 React app served at http://localhost:${PORT}/`);
-  }
+  console.log(`📱 React app served at http://localhost:${PORT}/`);
 });
 
 // Handle server errors

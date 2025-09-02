@@ -2,8 +2,11 @@ const express = require('express');
 const http = require('http');
 const path = require('path');
 
+// VERSION: 2.0 - FORCED PRODUCTION MODE FOR RAILWAY
+// UPDATED: 2025-09-02 - Always serve React app
 console.log('🚀 Starting ultra-simple Railway server...');
 console.log('🔧 FORCED PRODUCTION MODE - React app will always be served');
+console.log('📅 Version 2.0 - Railway Production Mode Enabled');
 
 const app = express();
 const server = http.createServer(app);
